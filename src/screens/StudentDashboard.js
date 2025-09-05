@@ -20,6 +20,7 @@ import { agreementApi } from '../api/agreement';
 import { useCurrency } from '../hooks/useCurrency';
 import { getUserLocationAndCurrency, formatCurrency, getCurrencySymbol, getAgreementCurrency } from '../utils/currencyUtils';
 import { formatDate, getTimeAgo, getDaysUntilDate, isOverdue, getCurrentMonth, getCurrentYear, isDateInCurrentMonth } from '../utils/dateUtils';
+import CreateAgreementModal from '../components/CreateAgreementModal';
 
 // Socket for real-time updates (if available)
 let socket = null;
@@ -57,6 +58,11 @@ const StudentDashboard = () => {
   const [completedAgreements, setCompletedAgreements] = useState([]);
   const [recommendedWriters, setRecommendedWriters] = useState([]);
   const [agreementBadgeCount, setAgreementBadgeCount] = useState(0);
+  
+  // Modal states
+  const [showCreateAgreementModal, setShowCreateAgreementModal] = useState(false);
+  const [selectedWriter, setSelectedWriter] = useState(null);
+  const [creatingAgreement, setCreatingAgreement] = useState(false);
   
   const [stats, setStats] = useState({
     totalSpent: 0,
@@ -280,6 +286,56 @@ const StudentDashboard = () => {
   const onRefresh = useCallback(() => {
     fetchData(true);
   }, [fetchData]);
+
+  // Create Agreement Modal Handlers
+  const handleCreateAgreementWithWriter = (writer) => {
+    console.log('📱 [StudentDashboard] Creating agreement with writer:', writer.name);
+    setSelectedWriter(writer);
+    setShowCreateAgreementModal(true);
+  };
+
+  const handleCreateAgreement = async (agreementData) => {
+    try {
+      setCreatingAgreement(true);
+      console.log('📱 [StudentDashboard] Creating agreement:', agreementData);
+
+      const result = await agreementApi.createAgreement(agreementData);
+      console.log('📱 [StudentDashboard] Agreement created successfully:', result);
+
+      // Close modal and reset state
+      setShowCreateAgreementModal(false);
+      setSelectedWriter(null);
+
+      // Refresh dashboard data
+      await fetchData();
+
+      Alert.alert(
+        'Success! 🎉',
+        `Agreement created successfully!\n\nThe writer will be notified and can accept your project proposal. You'll receive updates on your dashboard.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => console.log('Agreement creation acknowledged')
+          }
+        ]
+      );
+
+    } catch (error) {
+      console.error('📱 [StudentDashboard] Error creating agreement:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to create agreement. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setCreatingAgreement(false);
+    }
+  };
+
+  const handleCloseCreateAgreementModal = () => {
+    setShowCreateAgreementModal(false);
+    setSelectedWriter(null);
+  };
 
   const getStatusColor = (status) => {
     switch (status) {
@@ -635,7 +691,7 @@ const StudentDashboard = () => {
         <Button 
           mode="contained" 
           compact 
-          onPress={() => console.log('Hire writer:', writer.name)}
+          onPress={() => handleCreateAgreementWithWriter(writer)}
           style={styles.hireButton}
         >
           Hire
@@ -937,6 +993,15 @@ const StudentDashboard = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Create Agreement Modal */}
+      <CreateAgreementModal
+        visible={showCreateAgreementModal}
+        onClose={handleCloseCreateAgreementModal}
+        onSubmit={handleCreateAgreement}
+        loading={creatingAgreement}
+        writer={selectedWriter}
+      />
     </SafeAreaView>
   );
 };

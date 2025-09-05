@@ -40,6 +40,8 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { Audio } from 'expo-av';
+import ReviewAgreementModal from '../components/ReviewAgreementModal';
+import CompleteAssignmentModal from '../components/CompleteAssignmentModal';
 
 const { width, height } = Dimensions.get('window');
 
@@ -74,6 +76,12 @@ const WriterChat = () => {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  
+  // Modal states
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [selectedAgreement, setSelectedAgreement] = useState(null);
+  const [processingAction, setProcessingAction] = useState(false);
 
   // Refs for managing focus and scroll
   const flatListRef = useRef(null);
@@ -691,7 +699,7 @@ const WriterChat = () => {
   // Agreement handling
   const handleAcceptAgreement = async (agreementId) => {
     try {
-      setGlobalLoading(true);
+      setProcessingAction(true);
       console.log('📱 [WriterChat] Accepting agreement:', agreementId);
       
       const result = await agreementApi.acceptAgreement(agreementId);
@@ -702,6 +710,10 @@ const WriterChat = () => {
         fetchAgreements(),
         fetchChats()
       ]);
+
+      // Close modal
+      setShowReviewModal(false);
+      setSelectedAgreement(null);
       
       Alert.alert(
         'Success! 🎉',
@@ -728,58 +740,95 @@ const WriterChat = () => {
         [{ text: 'OK' }]
       );
     } finally {
-      setGlobalLoading(false);
+      setProcessingAction(false);
     }
   };
 
-  const handleCompleteAssignment = async (agreementId) => {
+  const handleCancelAgreement = async (agreementId) => {
     try {
+      setProcessingAction(true);
+      console.log('📱 [WriterChat] Cancelling agreement:', agreementId);
+      
+      const result = await agreementApi.cancelAgreement(agreementId);
+      console.log('📱 [WriterChat] Agreement cancelled:', result);
+      
+      // Refresh both agreements and chats
+      await Promise.all([
+        fetchAgreements(),
+        fetchChats()
+      ]);
+
+      // Close modal
+      setShowReviewModal(false);
+      setSelectedAgreement(null);
+      
+      Alert.alert('Agreement Cancelled', 'The agreement has been cancelled successfully.');
+    } catch (err) {
+      console.error('📱 [WriterChat] Error cancelling agreement:', err);
       Alert.alert(
-        'Complete Assignment',
-        'Are you sure you want to mark this assignment as completed?',
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Complete',
-            onPress: async () => {
-              try {
-                setGlobalLoading(true);
-                console.log('📱 [WriterChat] Completing agreement:', agreementId);
-                
-                const result = await agreementApi.completeAgreement(agreementId);
-                console.log('📱 [WriterChat] Agreement completed:', result);
-                
-                // Refresh agreements and chats
-                await Promise.all([
-                  fetchAgreements(),
-                  fetchChats()
-                ]);
-                
-                Alert.alert(
-                  'Success! 🎉',
-                  'Assignment marked as completed! The student will be notified.',
-                  [{ text: 'OK' }]
-                );
-              } catch (err) {
-                console.error('📱 [WriterChat] Error completing agreement:', err);
-                Alert.alert(
-                  'Error',
-                  err.message || 'Failed to complete assignment. Please try again.',
-                  [{ text: 'OK' }]
-                );
-              } finally {
-                setGlobalLoading(false);
-              }
-            }
-          }
-        ]
+        'Error',
+        err.message || 'Failed to cancel agreement. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleReviewAgreement = (agreement) => {
+    console.log('📱 [WriterChat] Reviewing agreement:', agreement._id);
+    setSelectedAgreement(agreement);
+    setShowReviewModal(true);
+  };
+
+  const handleCompleteAssignment = (agreementId) => {
+    console.log('📱 [WriterChat] Initiating assignment completion:', agreementId);
+    const agreement = agreements.find(a => a._id === agreementId);
+    setSelectedAgreement(agreement);
+    setShowCompleteModal(true);
+  };
+
+  const handleConfirmComplete = async () => {
+    if (!selectedAgreement) return;
+
+    try {
+      setProcessingAction(true);
+      console.log('📱 [WriterChat] Completing assignment:', selectedAgreement._id);
+      
+      const result = await agreementApi.completeAgreement(selectedAgreement._id);
+      console.log('📱 [WriterChat] Agreement completed:', result);
+      
+      // Close modal and refresh data
+      setShowCompleteModal(false);
+      setSelectedAgreement(null);
+      
+      // Refresh agreements and chats
+      await Promise.all([
+        fetchAgreements(),
+        fetchChats()
+      ]);
+      
+      Alert.alert(
+        'Success! 🎉',
+        'Assignment marked as completed! The student will be notified.',
+        [{ text: 'OK' }]
       );
     } catch (err) {
-      console.error('📱 [WriterChat] Error in handleCompleteAssignment:', err);
+      console.error('📱 [WriterChat] Error completing agreement:', err);
+      Alert.alert(
+        'Error',
+        err.message || 'Failed to complete assignment. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setProcessingAction(false);
     }
+  };
+
+  const handleCloseModals = () => {
+    setShowReviewModal(false);
+    setShowCompleteModal(false);
+    setSelectedAgreement(null);
   };
 
   // File handling utility functions
@@ -1071,12 +1120,12 @@ const WriterChat = () => {
           <>
             <Button
               mode="contained"
-              onPress={() => handleAcceptAgreement(agreement.id)}
+              onPress={() => handleReviewAgreement(agreement)}
               style={styles.acceptButton}
               labelStyle={styles.acceptButtonText}
               icon="check-circle"
             >
-              Accept Agreement
+              Review Agreement
             </Button>
             <Button
               mode="outlined"
@@ -1633,6 +1682,25 @@ const WriterChat = () => {
       >
         {snackbarMessage}
       </Snackbar>
+
+      {/* Review Agreement Modal */}
+      <ReviewAgreementModal
+        visible={showReviewModal}
+        agreement={selectedAgreement}
+        onClose={handleCloseModals}
+        onAccept={handleAcceptAgreement}
+        onCancel={handleCancelAgreement}
+        loading={processingAction}
+      />
+
+      {/* Complete Assignment Modal */}
+      <CompleteAssignmentModal
+        visible={showCompleteModal}
+        onClose={handleCloseModals}
+        onConfirm={handleConfirmComplete}
+        projectTitle={selectedAgreement?.projectDetails?.title || 'this assignment'}
+        loading={processingAction}
+      />
     </SafeAreaView>
   );
 };

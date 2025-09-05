@@ -21,6 +21,8 @@ import { agreementApi } from '../api/agreement';
 import { useCurrency } from '../hooks/useCurrency';
 import { getUserLocationAndCurrency, formatCurrency, getCurrencySymbol } from '../utils/currencyUtils';
 import { formatDate, getTimeAgo, getDaysUntilDate, isOverdue } from '../utils/dateUtils';
+import ReviewAgreementModal from '../components/ReviewAgreementModal';
+import CompleteAssignmentModal from '../components/CompleteAssignmentModal';
 
 // Socket for real-time updates (if available)
 let socket = null;
@@ -67,6 +69,12 @@ const WriterDashboard = () => {
     rating: 4.8,
     responseRate: 98
   });
+
+  // Modal states
+  const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showCompleteModal, setShowCompleteModal] = useState(false);
+  const [selectedAgreement, setSelectedAgreement] = useState(null);
+  const [processingAction, setProcessingAction] = useState(false);
 
   // Helper function to get writer earnings with proper currency conversion
   const getWriterEarningsDisplay = (agreements) => {
@@ -312,51 +320,88 @@ const WriterDashboard = () => {
   const handleAcceptAgreement = async (agreementId) => {
     try {
       console.log('📱 [WriterDashboard] Accepting agreement:', agreementId);
+      setProcessingAction(true);
       
-      Alert.alert(
-        'Accept Agreement',
-        'Are you sure you want to accept this project?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Accept', 
-            onPress: async () => {
-              await acceptAssignment(agreementId);
-              Alert.alert('Success', 'Agreement accepted successfully!');
-              fetchData(true);
-            }
-          }
-        ]
-      );
+      const result = await agreementApi.acceptAgreement(agreementId);
+      console.log('📱 [WriterDashboard] Agreement accepted:', result);
+      
+      // Refresh data and close modal
+      await fetchData(true);
+      setShowReviewModal(false);
+      setSelectedAgreement(null);
+      
+      Alert.alert('Success! 🎉', 'Agreement accepted successfully! You can now start working on this project.');
     } catch (error) {
       console.error('📱 [WriterDashboard] Error accepting agreement:', error);
-      Alert.alert('Error', 'Failed to accept agreement. Please try again.');
+      Alert.alert('Error', error.message || 'Failed to accept agreement. Please try again.');
+    } finally {
+      setProcessingAction(false);
     }
   };
 
-  const handleCompleteAssignment = async (agreementId) => {
+  const handleCancelAgreement = async (agreementId) => {
     try {
-      console.log('📱 [WriterDashboard] Completing assignment:', agreementId);
+      console.log('📱 [WriterDashboard] Cancelling agreement:', agreementId);
+      setProcessingAction(true);
       
-      Alert.alert(
-        'Complete Assignment',
-        'Are you sure you want to mark this assignment as completed?',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Complete', 
-            onPress: async () => {
-              await completeAssignment(agreementId);
-              Alert.alert('Success', 'Assignment completed successfully!');
-              fetchData(true);
-            }
-          }
-        ]
-      );
+      const result = await agreementApi.cancelAgreement(agreementId);
+      console.log('📱 [WriterDashboard] Agreement cancelled:', result);
+      
+      // Refresh data and close modal
+      await fetchData(true);
+      setShowReviewModal(false);
+      setSelectedAgreement(null);
+      
+      Alert.alert('Agreement Cancelled', 'The agreement has been cancelled successfully.');
+    } catch (error) {
+      console.error('📱 [WriterDashboard] Error cancelling agreement:', error);
+      Alert.alert('Error', error.message || 'Failed to cancel agreement. Please try again.');
+    } finally {
+      setProcessingAction(false);
+    }
+  };
+
+  const handleReviewAgreement = (agreement) => {
+    console.log('📱 [WriterDashboard] Reviewing agreement:', agreement._id);
+    setSelectedAgreement(agreement);
+    setShowReviewModal(true);
+  };
+
+  const handleCompleteAssignment = (agreementId) => {
+    console.log('📱 [WriterDashboard] Initiating assignment completion:', agreementId);
+    const agreement = activeAgreements.find(a => a._id === agreementId);
+    setSelectedAgreement(agreement);
+    setShowCompleteModal(true);
+  };
+
+  const handleConfirmComplete = async () => {
+    if (!selectedAgreement) return;
+
+    try {
+      console.log('📱 [WriterDashboard] Completing assignment:', selectedAgreement._id);
+      setProcessingAction(true);
+      
+      const result = await completeAssignment(selectedAgreement._id);
+      console.log('📱 [WriterDashboard] Assignment completed:', result);
+      
+      // Close modal and refresh data
+      setShowCompleteModal(false);
+      setSelectedAgreement(null);
+      await fetchData(true);
+      
+      Alert.alert('Success! 🎉', 'Assignment completed successfully! Payment has been processed.');
     } catch (error) {
       console.error('📱 [WriterDashboard] Error completing assignment:', error);
-      Alert.alert('Error', 'Failed to complete assignment. Please try again.');
+      Alert.alert('Error', error.message || 'Failed to complete assignment. Please try again.');
+    } finally {
+      setProcessingAction(false);
     }
+  };
+
+  const handleCloseModals = () => {
+    setShowReviewModal(false);
+    setShowCompleteModal(false);
+    setSelectedAgreement(null);
   };
 
   const getStatusColor = (status) => {
@@ -479,17 +524,17 @@ const WriterDashboard = () => {
               {isPending && onAccept && (
                 <TouchableOpacity 
                   style={styles.acceptButtonDetailed}
-                  onPress={() => onAccept(agreement._id)}
+                  onPress={() => handleReviewAgreement(agreement)}
                 >
                   <Ionicons name="checkmark-outline" size={16} color="#10b981" />
-                  <Text style={[styles.buttonTextDetailed, { color: '#10b981' }]}>Accept</Text>
+                  <Text style={[styles.buttonTextDetailed, { color: '#10b981' }]}>Review</Text>
                 </TouchableOpacity>
               )}
               
               {agreement.status === 'active' && onComplete && (
                 <TouchableOpacity 
                   style={styles.completeButtonDetailed}
-                  onPress={() => onComplete(agreement._id)}
+                  onPress={() => handleCompleteAssignment(agreement._id)}
                 >
                   <Ionicons name="checkmark-done-outline" size={16} color="#3b82f6" />
                   <Text style={[styles.buttonTextDetailed, { color: '#3b82f6' }]}>Complete</Text>
@@ -922,6 +967,25 @@ const WriterDashboard = () => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Review Agreement Modal */}
+      <ReviewAgreementModal
+        visible={showReviewModal}
+        agreement={selectedAgreement}
+        onClose={handleCloseModals}
+        onAccept={handleAcceptAgreement}
+        onCancel={handleCancelAgreement}
+        loading={processingAction}
+      />
+
+      {/* Complete Assignment Modal */}
+      <CompleteAssignmentModal
+        visible={showCompleteModal}
+        onClose={handleCloseModals}
+        onConfirm={handleConfirmComplete}
+        projectTitle={selectedAgreement?.projectDetails?.title || 'this assignment'}
+        loading={processingAction}
+      />
     </SafeAreaView>
   );
 };

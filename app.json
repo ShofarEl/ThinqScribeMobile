@@ -58,7 +58,11 @@
     },
     "linking": {
       "scheme": "thinqscribe",
-      "prefixes": ["http://localhost:8081", "http://localhost:8082", "thinqscribe://"],
+      "prefixes": [
+        "http://localhost:8081",
+        "http://localhost:8082",
+        "thinqscribe://"
+      ],
       "config": {
         "screens": {
           "index": "",
@@ -73,6 +77,12 @@
           "support": "support"
         }
       }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0d929edf-258b-4ee9-b0ee-69175782fe3d"
     }
   }
 }

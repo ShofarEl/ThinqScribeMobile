@@ -48,6 +48,7 @@ import FeatherIcon from 'react-native-vector-icons/Feather';
 import { useAuth } from '../context/AuthContext';
 import { useAppLoading } from '../context/AppLoadingContext';
 import { useSocket } from '../context/SocketContext';
+import CreateAgreementModal from '../components/CreateAgreementModal';
 import { getChatMessages, sendMessage as sendChatMessage, getChats, sendChatFile } from '../api/chat';
 
 const { width, height } = Dimensions.get('window');
@@ -807,6 +808,10 @@ const StudentChat = () => {
   const [recording, setRecording] = useState(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
 
+  // Modal states
+  const [showCreateAgreementModal, setShowCreateAgreementModal] = useState(false);
+  const [creatingAgreement, setCreatingAgreement] = useState(false);
+
   // Refs
   const flatListRef = useRef(null);
   const typingTimeoutRef = useRef(null);
@@ -1380,6 +1385,54 @@ const StudentChat = () => {
 
   const cancelReply = () => {
     setReplyingTo(null);
+  };
+
+  // Create Agreement Modal Handlers
+  const handleCreateAgreementWithWriter = () => {
+    if (!currentChat?.otherParticipant) {
+      showSnackbar('Writer information not available');
+      return;
+    }
+    console.log('📱 [StudentChat] Creating agreement with writer:', currentChat.otherParticipant.name);
+    setShowCreateAgreementModal(true);
+  };
+
+  const handleCreateAgreement = async (agreementData) => {
+    try {
+      setCreatingAgreement(true);
+      console.log('📱 [StudentChat] Creating agreement:', agreementData);
+
+      const result = await agreementApi.createAgreement(agreementData);
+      console.log('📱 [StudentChat] Agreement created successfully:', result);
+
+      // Close modal
+      setShowCreateAgreementModal(false);
+
+      Alert.alert(
+        'Success! 🎉',
+        `Agreement created successfully!\n\nThe writer will be notified and can accept your project proposal. You'll receive updates on your dashboard.`,
+        [
+          {
+            text: 'OK',
+            onPress: () => console.log('Agreement creation acknowledged')
+          }
+        ]
+      );
+
+    } catch (error) {
+      console.error('📱 [StudentChat] Error creating agreement:', error);
+      Alert.alert(
+        'Error',
+        error.message || 'Failed to create agreement. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setCreatingAgreement(false);
+    }
+  };
+
+  const handleCloseCreateAgreementModal = () => {
+    setShowCreateAgreementModal(false);
   };
 
   // Audio call functionality
@@ -2256,15 +2309,7 @@ const StudentChat = () => {
             <Menu.Item
               onPress={() => {
                 setMenuVisible(false);
-                router.push({
-                  pathname: '/create-agreement',
-                  params: { 
-                    writerId: currentChat?.otherParticipant?._id,
-                    chatId: currentChat?.id,
-                    writerName: currentChat?.otherParticipant?.name,
-                    writerAvatar: currentChat?.otherParticipant?.avatar
-                  }
-                });
+                handleCreateAgreementWithWriter();
               }}
               title="Create Agreement"
               leadingIcon="file-document"
@@ -2553,6 +2598,15 @@ const StudentChat = () => {
         >
           {snackbarMessage}
         </Snackbar>
+
+        {/* Create Agreement Modal */}
+        <CreateAgreementModal
+          visible={showCreateAgreementModal}
+          onClose={handleCloseCreateAgreementModal}
+          onSubmit={handleCreateAgreement}
+          loading={creatingAgreement}
+          writer={currentChat?.otherParticipant}
+        />
       </SafeAreaView>
     </PaperProvider>
   );
