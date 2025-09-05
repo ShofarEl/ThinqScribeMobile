@@ -1,54 +1,57 @@
-import { Link, Stack, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '@/src/context/AuthContext';
 import { useEffect } from 'react';
 
-export default function NotFoundScreen() {
+export default function CatchAllScreen() {
   const router = useRouter();
   const { isAuthenticated, loading } = useAuth();
 
   useEffect(() => {
-    // If user is authenticated, redirect to tabs instead of showing not found
-    if (!loading && isAuthenticated) {
-      router.replace('/(tabs)');
-    } else if (!loading && !isAuthenticated) {
-      // If not authenticated, redirect to main landing page
-      router.replace('/');
+    // Automatically redirect based on auth state
+    if (!loading) {
+      if (isAuthenticated) {
+        router.replace('/(tabs)');
+      } else {
+        router.replace('/');
+      }
     }
   }, [isAuthenticated, loading]);
 
-  return (
-    <>
-      <Stack.Screen options={{ title: 'ThinqScribe', headerShown: false }} />
+  if (loading) {
+    return (
       <LinearGradient
         colors={['#015382', '#017DB0']}
         style={styles.container}
       >
         <View style={styles.content}>
-          <Text style={styles.title}>Oops!</Text>
-          <Text style={styles.subtitle}>This page could not be found.</Text>
-          
-          <View style={styles.buttonContainer}>
-            <TouchableOpacity 
-              style={styles.button}
-              onPress={() => router.replace('/')}
-            >
-              <Text style={styles.buttonText}>Go to Home</Text>
-            </TouchableOpacity>
-            
-            {!isAuthenticated && (
-              <TouchableOpacity 
-                style={styles.button}
-                onPress={() => router.push('./signin')}
-              >
-                <Text style={styles.buttonText}>Sign In</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+          <Text style={styles.title}>ThinqScribe</Text>
+          <Text style={styles.subtitle}>Loading...</Text>
         </View>
       </LinearGradient>
-    </>
+    );
+  }
+
+  return (
+    <LinearGradient
+      colors={['#015382', '#017DB0']}
+      style={styles.container}
+    >
+      <View style={styles.content}>
+        <Text style={styles.title}>ThinqScribe</Text>
+        <Text style={styles.subtitle}>Redirecting...</Text>
+        
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity 
+            style={styles.button}
+            onPress={() => router.replace('/')}
+          >
+            <Text style={styles.buttonText}>Go to Home</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </LinearGradient>
   );
 }
 

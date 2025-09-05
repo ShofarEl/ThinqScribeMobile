@@ -8,6 +8,7 @@
     "scheme": "thinqscribe",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "entryPoint": "expo-router/entry",
     "ios": {
       "supportsTablet": true
     },
@@ -25,7 +26,12 @@
       "favicon": "./assets/images/favicon.png"
     },
     "plugins": [
-      "expo-router",
+      [
+        "expo-router",
+        {
+          "root": "./app"
+        }
+      ],
       [
         "expo-splash-screen",
         {
@@ -39,10 +45,33 @@
     "experiments": {
       "typedRoutes": true
     },
+    "expo-router": {
+      "root": "./app"
+    },
     "extra": {
-      "router": {},
+      "router": {
+        "origin": false
+      },
       "eas": {
         "projectId": "0d929edf-258b-4ee9-b0ee-69175782fe3d"
+      }
+    },
+    "linking": {
+      "scheme": "thinqscribe",
+      "prefixes": ["http://localhost:8081", "http://localhost:8082", "thinqscribe://"],
+      "config": {
+        "screens": {
+          "index": "",
+          "signin": "signin",
+          "signup": "signup",
+          "(tabs)": "tabs",
+          "audio-call": "audio-call",
+          "about": "about",
+          "notifications": "notifications",
+          "privacy": "privacy",
+          "terms": "terms",
+          "support": "support"
+        }
       }
     }
   }
