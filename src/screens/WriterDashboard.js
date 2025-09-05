@@ -16,6 +16,7 @@ import { Card, Button, Avatar, Badge, ProgressBar, Chip } from 'react-native-pap
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useSocket } from '../context/SocketContext';
+import { useNavigation } from '@react-navigation/native';
 import { fetchWriterDashboardData, completeAssignment, acceptAssignment } from '../api/writerDashboard';
 import { agreementApi } from '../api/agreement';
 import { useCurrency } from '../hooks/useCurrency';
@@ -23,6 +24,19 @@ import { getUserLocationAndCurrency, formatCurrency, getCurrencySymbol } from '.
 import { formatDate, getTimeAgo, getDaysUntilDate, isOverdue } from '../utils/dateUtils';
 import ReviewAgreementModal from '../components/ReviewAgreementModal';
 import CompleteAssignmentModal from '../components/CompleteAssignmentModal';
+import { LinearGradient } from 'expo-linear-gradient';
+
+// Import premium design system
+import { colors, typography, shadows, spacing, borderRadius } from '../styles/designSystem';
+import { 
+  premiumCards, 
+  premiumText, 
+  premiumButtons, 
+  premiumStatus, 
+  premiumProgress, 
+  premiumAvatars, 
+  premiumLayout 
+} from '../styles/premiumComponents';
 
 // Socket for real-time updates (if available)
 let socket = null;
@@ -39,6 +53,7 @@ const { width } = Dimensions.get('window');
 const WriterDashboard = () => {
   const { user } = useAuth();
   const { socket } = useSocket() || {};
+  const navigation = useNavigation();
   const { 
     currency, 
     symbol, 
@@ -426,19 +441,62 @@ const WriterDashboard = () => {
     return formatCurrency(displayAmount, displayCurrency);
   };
 
-  const StatCard = ({ title, value, icon, color, subtitle }) => (
-    <Card style={[styles.statCard, { borderLeftColor: color }]}>
-      <Card.Content style={styles.statCardContent}>
+  const StatCard = ({ title, value, icon, color, subtitle, type = 'primary' }) => (
+    <View style={[
+      premiumCards.statCard, 
+      type === 'primary' && premiumCards.statCardPrimary,
+      type === 'success' && premiumCards.statCardSuccess,
+      type === 'warning' && premiumCards.statCardWarning,
+      type === 'info' && premiumCards.statCardInfo,
+      { 
+        flex: 1, // Let each card take equal space
+        marginHorizontal: spacing.xs / 2, // Small margin between cards
+        maxWidth: (width - 40) / 2, // Ensure maximum width
+        minWidth: 140, // Minimum width for readability
+      }
+    ]}>
+      <View style={styles.statCardContent}>
         <View style={styles.statCardLeft}>
-          <Text style={styles.statTitle}>{title}</Text>
-          <Text style={[styles.statValue, { color }]}>{value}</Text>
-          {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
+          <Text style={[
+            premiumText.overline, 
+            { 
+              marginBottom: spacing.sm, // Increased spacing
+              letterSpacing: 0.5,
+              lineHeight: 16, // Proper line height
+            }
+          ]}>
+            {title}
+          </Text>
+          <Text style={[
+            premiumText.headingMedium, 
+            { 
+              color, 
+              fontWeight: '700',
+              fontSize: 20, // Specific font size
+              lineHeight: 24, // Proper line height
+              marginBottom: spacing.xs,
+            }
+          ]}>
+            {value}
+          </Text>
+          {subtitle && (
+            <Text style={[
+              premiumText.caption, 
+              { 
+                marginTop: spacing.xs,
+                lineHeight: 14, // Proper line height
+                letterSpacing: 0.2,
+              }
+            ]}>
+              {subtitle}
+            </Text>
+          )}
         </View>
-        <View style={[styles.statIcon, { backgroundColor: color + '20' }]}>
+        <View style={[styles.modernStatIcon, { backgroundColor: color + '15' }]}>
           <Ionicons name={icon} size={24} color={color} />
         </View>
-      </Card.Content>
-    </Card>
+      </View>
+    </View>
   );
 
   // Detailed Project Card Component for the detailed sections
@@ -691,11 +749,17 @@ const WriterDashboard = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[premiumLayout.screen]}>
       <ScrollView
-        style={styles.scrollView}
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={colors.primary[500]}
+            colors={[colors.primary[500]]}
+          />
         }
       >
         {/* Enhanced Header */}
@@ -711,7 +775,10 @@ const WriterDashboard = () => {
               </View>
             </View>
             <View style={styles.headerRight}>
-              <TouchableOpacity style={styles.profileButton}>
+              <TouchableOpacity 
+                style={styles.profileButton}
+                onPress={() => navigation.navigate('ProfileSettings')}
+              >
                 <Avatar.Text 
                   size={45} 
                   label={user?.name?.charAt(0) || 'W'} 
@@ -764,36 +831,47 @@ const WriterDashboard = () => {
           </Card>
         )}
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Perfect 2x2 Grid */}
         <View style={styles.statsContainer}>
+          {/* First Row */}
+          <View style={styles.statsRow}>
           <StatCard
             title="Total Earnings"
             value={formatCurrencyDisplay(stats.totalEarnings)}
             icon="wallet-outline"
-            color="#10b981"
+              color={colors.success[600]}
             subtitle="Lifetime earnings"
+              type="success"
           />
           <StatCard
             title="Available Balance"
             value={formatCurrencyDisplay(stats.availableBalance)}
             icon="card-outline"
-            color="#3b82f6"
+              color={colors.primary[600]}
             subtitle="Ready to withdraw"
+              type="primary"
           />
+          </View>
+          
+          {/* Second Row */}
+          <View style={styles.statsRow}>
           <StatCard
             title="Pending Amount"
             value={formatCurrencyDisplay(stats.pendingAmount)}
             icon="time-outline"
-            color="#f59e0b"
+              color={colors.warning[600]}
             subtitle="From active projects"
+              type="warning"
           />
           <StatCard
             title="Completed"
             value={stats.completedCount.toString()}
             icon="checkmark-circle-outline"
-            color="#8b5cf6"
+              color={colors.info[600]}
             subtitle="Finished projects"
+              type="info"
           />
+          </View>
         </View>
 
         {/* Enhanced Projects Management */}
@@ -993,7 +1071,55 @@ const WriterDashboard = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.neutral[50],
+  },
+  
+  // Modern header styles
+  modernHeader: {
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.base,
+    borderBottomLeftRadius: borderRadius.xl,
+    borderBottomRightRadius: borderRadius.xl,
+    ...shadows.lg,
+  },
+  
+  modernNotificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  
+  modernProfileButton: {
+    padding: spacing.xs,
+  },
+  
+  // Modern stat icon
+  modernStatIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shadows.sm,
+  },
+  
+  // Stats container with proper grid layout
+  statsContainer: {
+    paddingHorizontal: spacing.base,
+    marginVertical: spacing.lg,
+  },
+  
+  // Stats row for 2x2 grid
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.xs, // Add padding to prevent edge overflow
   },
   loadingContainer: {
     flex: 1,
@@ -1175,10 +1301,15 @@ const styles = StyleSheet.create({
   statCardContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start', // Changed from center to flex-start
+    height: '100%',
+    paddingVertical: spacing.xs,
   },
   statCardLeft: {
     flex: 1,
+    paddingRight: spacing.sm, // Add padding to prevent text crowding
+    justifyContent: 'space-between',
+    minHeight: 60, // Ensure minimum height for text layout
   },
   statTitle: {
     fontSize: 12,

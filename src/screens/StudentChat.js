@@ -50,6 +50,7 @@ import { useAppLoading } from '../context/AppLoadingContext';
 import { useSocket } from '../context/SocketContext';
 import CreateAgreementModal from '../components/CreateAgreementModal';
 import { getChatMessages, sendMessage as sendChatMessage, getChats, sendChatFile } from '../api/chat';
+import { agreementApi } from '../api/agreement';
 
 const { width, height } = Dimensions.get('window');
 const HEADER_HEIGHT = Platform.OS === 'ios' ? 88 : 64;

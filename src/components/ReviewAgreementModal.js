@@ -11,10 +11,33 @@ import {
   Dimensions
 } from 'react-native';
 import { Button, Divider, Chip } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCurrency } from '../hooks/useCurrency';
-import moment from 'moment';
+// Using native Date methods instead of moment
+
+// Date formatting helper functions
+const formatDateTime = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[d.getMonth()];
+  const day = d.getDate().toString().padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  return `${month} ${day}, ${year} at ${hours}:${minutes}`;
+};
+
+const formatDate = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[d.getMonth()];
+  const day = d.getDate().toString().padStart(2, '0');
+  const year = d.getFullYear();
+  return `${month} ${day}, ${year}`;
+};
 
 const { width, height } = Dimensions.get('window');
 
@@ -158,7 +181,7 @@ const ReviewAgreementModal = ({
                 <View style={styles.deadlineContainer}>
                   <Icon name="calendar-clock" size={16} color="#f59e0b" />
                   <Text style={styles.deadlineText}>
-                    Due: {moment(agreement.projectDetails.deadline).format('MMM DD, YYYY [at] HH:mm')}
+                    Due: {formatDateTime(agreement.projectDetails.deadline)}
                   </Text>
                 </View>
               )}
@@ -224,7 +247,7 @@ const ReviewAgreementModal = ({
                   </View>
                   {installment.dueDate && (
                     <Text style={styles.installmentDate}>
-                      Due: {moment(installment.dueDate).format('MMM DD, YYYY')}
+                      Due: {formatDate(installment.dueDate)}
                     </Text>
                   )}
                   <View style={styles.installmentStatus}>

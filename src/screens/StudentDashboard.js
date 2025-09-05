@@ -16,11 +16,25 @@ import { Card, Button, Avatar, Badge, ProgressBar } from 'react-native-paper';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { fetchStudentDashboardData, getRecommendedWriters } from '../api/user';
+import { useNavigation } from '@react-navigation/native';
 import { agreementApi } from '../api/agreement';
 import { useCurrency } from '../hooks/useCurrency';
 import { getUserLocationAndCurrency, formatCurrency, getCurrencySymbol, getAgreementCurrency } from '../utils/currencyUtils';
 import { formatDate, getTimeAgo, getDaysUntilDate, isOverdue, getCurrentMonth, getCurrentYear, isDateInCurrentMonth } from '../utils/dateUtils';
 import CreateAgreementModal from '../components/CreateAgreementModal';
+import { LinearGradient } from 'expo-linear-gradient';
+
+// Import premium design system
+import { colors, typography, shadows, spacing, borderRadius } from '../styles/designSystem';
+import { 
+  premiumCards, 
+  premiumText, 
+  premiumButtons, 
+  premiumStatus, 
+  premiumProgress, 
+  premiumAvatars, 
+  premiumLayout 
+} from '../styles/premiumComponents';
 
 // Socket for real-time updates (if available)
 let socket = null;
@@ -36,6 +50,7 @@ const { width } = Dimensions.get('window');
 
 const StudentDashboard = () => {
   const { user } = useAuth();
+  const navigation = useNavigation();
   const { 
     currency, 
     symbol, 
@@ -367,19 +382,62 @@ const StudentDashboard = () => {
     return formatCurrency(displayAmount, displayCurrency);
   };
 
-  const StatCard = ({ title, value, icon, color, subtitle }) => (
-    <Card style={[styles.statCard, { borderLeftColor: color }]}>
-      <Card.Content style={styles.statCardContent}>
+  const StatCard = ({ title, value, icon, color, subtitle, type = 'primary' }) => (
+    <View style={[
+      premiumCards.statCard, 
+      type === 'primary' && premiumCards.statCardPrimary,
+      type === 'success' && premiumCards.statCardSuccess,
+      type === 'warning' && premiumCards.statCardWarning,
+      type === 'info' && premiumCards.statCardInfo,
+      { 
+        flex: 1, // Let each card take equal space
+        marginHorizontal: spacing.xs / 2, // Small margin between cards
+        maxWidth: (width - 40) / 2, // Ensure maximum width
+        minWidth: 140, // Minimum width for readability
+      }
+    ]}>
+      <View style={styles.statCardContent}>
         <View style={styles.statCardLeft}>
-          <Text style={styles.statTitle}>{title}</Text>
-          <Text style={[styles.statValue, { color }]}>{value}</Text>
-          {subtitle && <Text style={styles.statSubtitle}>{subtitle}</Text>}
+          <Text style={[
+            premiumText.overline, 
+            { 
+              marginBottom: spacing.sm, // Increased spacing
+              letterSpacing: 0.5,
+              lineHeight: 16, // Proper line height
+            }
+          ]}>
+            {title}
+          </Text>
+          <Text style={[
+            premiumText.headingMedium, 
+            { 
+              color, 
+              fontWeight: '700',
+              fontSize: 20, // Specific font size
+              lineHeight: 24, // Proper line height
+              marginBottom: spacing.xs,
+            }
+          ]}>
+            {value}
+          </Text>
+          {subtitle && (
+            <Text style={[
+              premiumText.caption, 
+              { 
+                marginTop: spacing.xs,
+                lineHeight: 14, // Proper line height
+                letterSpacing: 0.2,
+              }
+            ]}>
+              {subtitle}
+            </Text>
+          )}
         </View>
-        <View style={[styles.statIcon, { backgroundColor: color + '20' }]}>
+        <View style={[styles.modernStatIcon, { backgroundColor: color + '15' }]}>
           <Ionicons name={icon} size={24} color={color} />
         </View>
-      </Card.Content>
-    </Card>
+      </View>
+    </View>
   );
 
   // Detailed Project Card Component for the detailed sections
@@ -483,32 +541,59 @@ const StudentDashboard = () => {
     );
   };
 
-  const ProjectCard = ({ agreement }) => (
-    <Card style={styles.projectCard}>
-      <Card.Content>
+  const ProjectCard = ({ agreement }) => {
+    const getCardStyle = (status) => {
+      switch (status) {
+        case 'active':
+          return premiumCards.projectCardActive;
+        case 'pending':
+          return premiumCards.projectCardPending;
+        case 'completed':
+          return premiumCards.projectCardCompleted;
+        default:
+          return {};
+      }
+    };
+
+    return (
+      <View style={[premiumCards.projectCard, getCardStyle(agreement.status)]}>
         <View style={styles.projectHeader}>
-          <Text style={styles.projectTitle}>
+          <Text style={[premiumText.headingSmall, { flex: 1, marginRight: spacing.md }]}>
             {agreement.projectDetails?.title || 'Untitled Project'}
           </Text>
-          <Badge 
-            style={[styles.statusBadge, { backgroundColor: getStatusColor(agreement.status) }]}
-          >
-            {agreement.status}
-          </Badge>
+          <View style={[
+            premiumStatus.badge,
+            agreement.status === 'active' && premiumStatus.badgePrimary,
+            agreement.status === 'pending' && premiumStatus.badgeWarning,
+            agreement.status === 'completed' && premiumStatus.badgeSuccess,
+          ]}>
+            <Text style={[
+              premiumStatus.badgeText,
+              agreement.status === 'active' && premiumStatus.badgeTextPrimary,
+              agreement.status === 'pending' && premiumStatus.badgeTextWarning,
+              agreement.status === 'completed' && premiumStatus.badgeTextSuccess,
+            ]}>
+              {agreement.status.toUpperCase()}
+            </Text>
+          </View>
         </View>
         
-        <Text style={styles.projectSubject}>
+        <Text style={[premiumText.bodyMedium, { marginBottom: spacing.md, color: colors.neutral[500] }]}>
           {agreement.projectDetails?.subject || 'General'}
         </Text>
         
         {agreement.writer && (
-          <View style={styles.writerInfo}>
+          <View style={[styles.writerInfo, { marginBottom: spacing.md }]}>
+            <View style={[premiumAvatars.container, premiumAvatars.small, { marginRight: spacing.sm }]}>
             <Avatar.Text 
               size={32} 
               label={agreement.writer.name?.charAt(0) || 'W'} 
-              style={styles.writerAvatar}
+                style={{ backgroundColor: colors.primary[500] }}
             />
-            <Text style={styles.writerName}>{agreement.writer.name}</Text>
+            </View>
+            <Text style={[premiumText.bodySemibold, { color: colors.neutral[700] }]}>
+              {agreement.writer.name}
+            </Text>
           </View>
         )}
         
@@ -668,36 +753,42 @@ const StudentDashboard = () => {
             </Button>
           )}
         </View>
-      </Card.Content>
-    </Card>
+      </View>
   );
+  };
 
   const WriterCard = ({ writer }) => (
-    <Card style={styles.writerCard}>
-      <Card.Content style={styles.writerCardContent}>
+    <View style={premiumCards.profileCard}>
+      <View style={[premiumAvatars.container, premiumAvatars.medium, { marginRight: spacing.md }]}>
         <Avatar.Text 
           size={40} 
           label={writer.name?.charAt(0) || 'W'} 
-          style={styles.writerAvatar}
+          style={{ backgroundColor: colors.primary[500] }}
         />
-        <View style={styles.writerDetails}>
-          <Text style={styles.writerName}>{writer.name}</Text>
-          <Text style={styles.writerSpecialty}>{writer.specialty}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={[premiumText.bodySemibold, { marginBottom: spacing.xs }]}>
+          {writer.name}
+        </Text>
+        <Text style={[premiumText.caption, { marginBottom: spacing.xs, color: colors.neutral[500] }]}>
+          {writer.specialty}
+        </Text>
           <View style={styles.writerRating}>
-            <Ionicons name="star" size={14} color="#f59e0b" />
-            <Text style={styles.ratingText}>{writer.rating || '4.5'}</Text>
+          <Ionicons name="star" size={16} color={colors.warning[500]} />
+          <Text style={[premiumText.caption, { marginLeft: spacing.xs, color: colors.neutral[600] }]}>
+            {writer.rating || '4.5'}
+          </Text>
           </View>
         </View>
-        <Button 
-          mode="contained" 
-          compact 
-          onPress={() => handleCreateAgreementWithWriter(writer)}
-          style={styles.hireButton}
-        >
+      <TouchableOpacity 
+        style={[premiumButtons.primary, { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, minHeight: 36 }]}
+        onPress={() => handleCreateAgreementWithWriter(writer)}
+      >
+        <Text style={[premiumButtons.buttonTextPrimary, { fontSize: typography.sizes.sm }]}>
           Hire
-        </Button>
-      </Card.Content>
-    </Card>
+        </Text>
+      </TouchableOpacity>
+    </View>
   );
 
   if (loading || currencyLoading) {
@@ -717,11 +808,17 @@ const StudentDashboard = () => {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={[premiumLayout.screen]}>
       <ScrollView
-        style={styles.scrollView}
+        style={{ flex: 1 }}
+        showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          <RefreshControl 
+            refreshing={refreshing} 
+            onRefresh={onRefresh}
+            tintColor={colors.primary[500]}
+            colors={[colors.primary[500]]}
+          />
         }
       >
         {/* Enhanced Header */}
@@ -733,7 +830,10 @@ const StudentDashboard = () => {
               <Text style={styles.roleText}>Student Dashboard</Text>
             </View>
             <View style={styles.headerRight}>
-              <TouchableOpacity style={styles.profileButton}>
+              <TouchableOpacity 
+                style={styles.profileButton}
+                onPress={() => navigation.navigate('ProfileSettings')}
+              >
                 <Avatar.Text 
                   size={45} 
                   label={user?.name?.charAt(0) || 'S'} 
@@ -780,36 +880,47 @@ const StudentDashboard = () => {
           </Card>
         )}
 
-        {/* Stats Cards */}
+        {/* Stats Cards - Perfect 2x2 Grid */}
         <View style={styles.statsContainer}>
+          {/* First Row */}
+          <View style={styles.statsRow}>
           <StatCard
             title="Total Spent"
             value={formatCurrencyDisplay(stats.totalSpent)}
             icon="card-outline"
-            color="#10b981"
+              color={colors.success[600]}
             subtitle="Lifetime spending"
+              type="success"
           />
           <StatCard
             title="Active Projects"
             value={stats.activeProjects.toString()}
             icon="flash-outline"
-            color="#3b82f6"
+              color={colors.primary[600]}
             subtitle="In progress"
+              type="primary"
           />
+          </View>
+          
+          {/* Second Row */}
+          <View style={styles.statsRow}>
           <StatCard
             title="Completed"
             value={stats.completedProjects.toString()}
             icon="checkmark-circle-outline"
-            color="#f59e0b"
+              color={colors.warning[600]}
             subtitle="Finished projects"
+              type="warning"
           />
           <StatCard
             title="This Month"
             value={formatCurrencyDisplay(stats.moneySpentThisMonth)}
             icon="calendar-outline"
-            color="#8b5cf6"
+              color={colors.info[600]}
             subtitle={`${stats.projectsThisMonth} projects`}
+              type="info"
           />
+          </View>
         </View>
 
         {/* Enhanced Projects Management */}
@@ -954,7 +1065,7 @@ const StudentDashboard = () => {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Recommended Writers</Text>
-            <TouchableOpacity>
+                         <TouchableOpacity onPress={() => navigation.navigate('StudentWriterList')}>
               <Text style={styles.seeAllText}>See All</Text>
             </TouchableOpacity>
           </View>
@@ -982,7 +1093,10 @@ const StudentDashboard = () => {
               <Ionicons name="add-outline" size={24} color="#015382" />
               <Text style={styles.actionText}>New Project</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.actionButton}>
+                         <TouchableOpacity 
+               style={styles.actionButton}
+               onPress={() => navigation.navigate('StudentWriterList')}
+             >
               <Ionicons name="people-outline" size={24} color="#015382" />
               <Text style={styles.actionText}>Find Writers</Text>
             </TouchableOpacity>
@@ -1009,7 +1123,69 @@ const StudentDashboard = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.neutral[50],
+  },
+  
+  // Modern header styles
+  modernHeader: {
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.base,
+    borderBottomLeftRadius: borderRadius.xl,
+    borderBottomRightRadius: borderRadius.xl,
+    ...shadows.lg,
+  },
+  
+  modernNotificationButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    position: 'relative',
+  },
+  
+  modernNotificationBadge: {
+    position: 'absolute',
+    top: -2,
+    right: -2,
+    backgroundColor: colors.error[500],
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.white,
+  },
+  
+  modernProfileButton: {
+    padding: spacing.xs,
+  },
+  
+  // Modern stat icon
+  modernStatIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
+    ...shadows.sm,
+  },
+  
+  // Stats container with proper grid layout
+  statsContainer: {
+    paddingHorizontal: spacing.base,
+    marginVertical: spacing.lg,
+  },
+  
+  // Stats row for 2x2 grid
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+    paddingHorizontal: spacing.xs, // Add padding to prevent edge overflow
   },
   loadingContainer: {
     flex: 1,
@@ -1495,10 +1671,15 @@ const styles = StyleSheet.create({
   statCardContent: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start', // Changed from center to flex-start
+    height: '100%',
+    paddingVertical: spacing.xs,
   },
   statCardLeft: {
     flex: 1,
+    paddingRight: spacing.sm, // Add padding to prevent text crowding
+    justifyContent: 'space-between',
+    minHeight: 60, // Ensure minimum height for text layout
   },
   statTitle: {
     fontSize: 12,

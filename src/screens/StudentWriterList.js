@@ -1,27 +1,41 @@
+// ThinqScribe/src/screens/StudentWriterList.js - Mobile Writer Marketplace
+
 import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
-  FlatList,
+  ScrollView,
   TouchableOpacity,
-  Image,
-  Alert,
-  RefreshControl,
-  Dimensions,
+  StyleSheet,
+  SafeAreaView,
   TextInput,
-  Modal
+  ActivityIndicator,
+  Dimensions,
+  Image,
+  Platform,
+  FlatList,
+  RefreshControl,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { ActivityIndicator, Card, Button, Avatar, Badge, Chip, Searchbar } from 'react-native-paper';
+import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useAuth } from '../context/AuthContext';
-import { useAppLoading } from '../context/AppLoadingContext';
+import { Avatar, Badge, Chip } from 'react-native-paper';
+import { useNavigation } from '@react-navigation/native';
 import { getRecommendedWriters } from '../api/user';
 import { startChat } from '../api/chat';
-import { useRouter } from 'expo-router';
+import { useNotifications } from '../context/NotificationContext';
 
-const { width } = Dimensions.get('window');
+// Import premium design system
+import { colors, typography, shadows, spacing, borderRadius } from '../styles/designSystem';
+import { 
+  premiumCards, 
+  premiumText, 
+  premiumButtons, 
+  premiumStatus, 
+  premiumAvatars, 
+  premiumLayout 
+} from '../styles/premiumComponents';
+
+const { width, height } = Dimensions.get('window');
 
 const StudentWriterList = () => {
   const [writers, setWriters] = useState([]);
@@ -29,85 +43,85 @@ const StudentWriterList = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedSpecialty, setSelectedSpecialty] = useState('all');
   const [sortBy, setSortBy] = useState('rating');
-  const [showFilters, setShowFilters] = useState(false);
-  const [stats, setStats] = useState({
-    totalWriters: 0,
-    averageRating: 4.8,
-    onlineWriters: 0
-  });
-
-  const { user } = useAuth();
-  const { setLoading: setGlobalLoading } = useAppLoading();
-  const router = useRouter();
+  const { socket } = useNotifications();
+  const navigation = useNavigation();
 
   useEffect(() => {
     fetchWriters();
   }, []);
 
+  // Socket listener for real-time writer profile updates
   useEffect(() => {
-    filterAndSortWriters();
-  }, [writers, searchQuery, selectedSpecialty, sortBy]);
+    if (!socket) return;
+
+    const handleWriterProfileUpdate = (data) => {
+      console.log('📝 Received writer profile update:', data);
+      
+      setWriters(prevWriters => 
+        prevWriters.map(writer => 
+          writer._id === data.writerId 
+            ? {
+                ...writer,
+                name: data.updatedFields.name || writer.name,
+                avatar: data.updatedFields.avatar || writer.avatar,
+                writerProfile: {
+                  ...writer.writerProfile,
+                  bio: data.updatedFields.bio !== undefined ? data.updatedFields.bio : writer.writerProfile?.bio
+                }
+              }
+            : writer
+        )
+      );
+    };
+
+    socket.on('writerProfileUpdated', handleWriterProfileUpdate);
+
+    return () => {
+      socket.off('writerProfileUpdated', handleWriterProfileUpdate);
+    };
+  }, [socket]);
 
   const fetchWriters = async () => {
     try {
-      setError(null);
-      console.log('📱 [StudentWriterList] Fetching writers...');
-      
+      setLoading(true);
       const writersData = await getRecommendedWriters();
-      console.log('📱 [StudentWriterList] Received writers data:', writersData);
       
-      // Enhance writers with realistic data
-      const enhancedWriters = (writersData || []).map((writer, index) => ({
+      // Enhanced mock data for better demonstration
+      const enhancedWriters = writersData.map((writer, index) => ({
         ...writer,
-        id: writer._id || writer.id,
-        rating: writer.rating || (4.2 + Math.random() * 0.8), // 4.2-5.0
-        reviewCount: writer.reviewCount || Math.floor(Math.random() * 100) + 20,
-        projectsCompleted: writer.projectsCompleted || Math.floor(Math.random() * 200) + 50,
-        responseTime: writer.responseTime || Math.floor(Math.random() * 4) + 1, // 1-5 hours
-        isOnline: writer.isOnline ?? (Math.random() > 0.3), // 70% online
-        verified: writer.verified ?? (Math.random() > 0.2), // 80% verified
-        avatar: writer.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${writer.name}`,
+        rating: 4.2 + Math.random() * 0.8, // Random rating between 4.2-5.0
+        reviewCount: Math.floor(Math.random() * 100) + 20,
+        projectsCompleted: Math.floor(Math.random() * 200) + 50,
+        responseTime: Math.floor(Math.random() * 4) + 1, // 1-5 hours
+        isOnline: Math.random() > 0.3, // 70% chance of being online
+        verified: Math.random() > 0.2, // 80% chance of being verified
         writerProfile: {
           ...writer.writerProfile,
           specialties: writer.writerProfile?.specialties || [
             'Academic Writing', 'Research Papers', 'Essays', 'Literature Review'
-          ].slice(0, Math.floor(Math.random() * 4) + 1),
-          bio: writer.writerProfile?.bio || `Experienced academic writer with ${Math.floor(Math.random() * 10) + 3} years of expertise.`,
-          education: writer.writerProfile?.education || ['PhD in Literature', 'Masters in Education'][Math.floor(Math.random() * 2)]
+          ].slice(0, Math.floor(Math.random() * 4) + 1)
         }
       }));
-
+      
       setWriters(enhancedWriters);
-      
-      // Calculate stats
-      const onlineCount = enhancedWriters.filter(w => w.isOnline).length;
-      const avgRating = enhancedWriters.reduce((sum, w) => sum + w.rating, 0) / enhancedWriters.length;
-      
-      setStats({
-        totalWriters: enhancedWriters.length,
-        averageRating: isNaN(avgRating) ? 4.8 : avgRating,
-        onlineWriters: onlineCount
-      });
-
-      console.log('📱 [StudentWriterList] Enhanced writers:', enhancedWriters.length);
+      setFilteredWriters(enhancedWriters);
     } catch (err) {
-      console.error('📱 [StudentWriterList] Error fetching writers:', err);
       setError(err.message || 'Failed to load writers');
-      Alert.alert('Error', 'Failed to load writers. Please try again.');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
   };
 
-  const filterAndSortWriters = () => {
+  // Filter and sort writers
+  useEffect(() => {
     let filtered = writers.filter(writer => {
-      const matchesSearch = writer.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const matchesSearch = writer.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            writer.writerProfile?.specialties?.some(spec => 
-                             spec.toLowerCase().includes(searchQuery.toLowerCase())
+                             spec.toLowerCase().includes(searchTerm.toLowerCase())
                            );
       
       const matchesSpecialty = selectedSpecialty === 'all' ||
@@ -133,26 +147,16 @@ const StudentWriterList = () => {
     });
 
     setFilteredWriters(filtered);
-  };
+  }, [writers, searchTerm, selectedSpecialty, sortBy]);
 
   const handleChat = async (writerId) => {
     try {
-      setGlobalLoading(true);
-      console.log('📱 [StudentWriterList] Starting chat with writer:', writerId);
-      
       const chat = await startChat(writerId);
-      console.log('📱 [StudentWriterList] Chat created:', chat);
-      
       if (chat && chat._id) {
-        router.push(`/chat/student/${chat._id}`);
-      } else {
-        Alert.alert('Error', 'Failed to start chat. Please try again.');
+        navigation.navigate('StudentChat', { chatId: chat._id });
       }
     } catch (err) {
-      console.error('📱 [StudentWriterList] Error starting chat:', err);
-      Alert.alert('Error', 'Failed to start chat. Please try again.');
-    } finally {
-      setGlobalLoading(false);
+      console.error('Failed to start chat:', err);
     }
   };
 
@@ -161,169 +165,132 @@ const StudentWriterList = () => {
     fetchWriters();
   };
 
-  const getSpecialties = () => {
-    const allSpecialties = writers.flatMap(writer => writer.writerProfile?.specialties || []);
-    return [...new Set(allSpecialties)];
-  };
+  // Get unique specialties for filter
+  const specialties = [...new Set(
+    writers.flatMap(writer => writer.writerProfile?.specialties || [])
+  )];
 
-  const renderHeader = () => (
-    <View style={styles.header}>
+  const filterOptions = [
+    { label: 'All Expertise', value: 'all' },
+    ...specialties.map(specialty => ({ label: specialty, value: specialty }))
+  ];
+
+  const sortOptions = [
+    { label: '⭐ Highest Rated', value: 'rating' },
+    { label: '🏆 Most Projects', value: 'projects' },
+    { label: '⚡ Fastest Response', value: 'response' },
+    { label: '🔤 Name (A-Z)', value: 'name' }
+  ];
+
+  const renderFilterChip = (option, isSelected, onPress) => (
+    <TouchableOpacity
+      key={option.value}
+      style={[
+        styles.filterChip,
+        isSelected && styles.selectedFilterChip
+      ]}
+      onPress={onPress}
+    >
+      <Text style={[
+        styles.filterChipText,
+        isSelected && styles.selectedFilterChipText
+      ]}>
+        {option.label}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderWriterCard = ({ item: writer }) => (
+    <View style={styles.writerCard}>
+      {/* Header with gradient */}
       <LinearGradient
-        colors={['#015382', '#017DB0']}
-        style={styles.headerGradient}
+        colors={colors.gradients.primary}
+        style={styles.writerCardHeader}
       >
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Expert Academic Writers</Text>
-          <Text style={styles.headerSubtitle}>
-            Connect with verified professionals for your academic success
+        {/* Online status */}
+        <View style={styles.onlineStatus}>
+          <View style={[
+            styles.statusDot, 
+            { backgroundColor: writer.isOnline ? colors.success[500] : colors.neutral[400] }
+          ]} />
+          <Text style={[premiumText.caption, { color: colors.white, marginLeft: spacing.xs }]}>
+            {writer.isOnline ? 'Online' : 'Offline'}
           </Text>
-          
-          {/* Stats Row */}
-          <View style={styles.statsRow}>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{stats.totalWriters}+</Text>
-              <Text style={styles.statLabel}>Elite Writers</Text>
+        </View>
+
+        {/* Avatar with verification badge */}
+        <View style={styles.avatarContainer}>
+          <Image
+            source={{ 
+              uri: writer.avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${writer.name}` 
+            }}
+            style={styles.writerAvatar}
+          />
+          {writer.verified && (
+            <View style={styles.verificationBadge}>
+              <Ionicons name="checkmark" size={14} color={colors.white} />
             </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{stats.averageRating.toFixed(1)}★</Text>
-              <Text style={styles.statLabel}>Avg Rating</Text>
-            </View>
-            <View style={styles.statCard}>
-              <Text style={styles.statNumber}>{stats.onlineWriters}</Text>
-              <Text style={styles.statLabel}>Online Now</Text>
-            </View>
+          )}
+        </View>
+
+        {/* Name and rating */}
+        <Text style={[premiumText.headingSmall, { color: colors.white, textAlign: 'center', marginTop: spacing.md }]}>
+          {writer.name}
+        </Text>
+        
+        <View style={styles.ratingContainer}>
+          <View style={styles.stars}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Ionicons
+                key={star}
+                name="star"
+                size={14}
+                color={star <= Math.floor(writer.rating) ? colors.warning[400] : colors.neutral[300]}
+              />
+            ))}
           </View>
+          <Text style={[premiumText.caption, { color: colors.white, marginTop: spacing.xs }]}>
+            ({writer.rating?.toFixed(1)}/5.0) • {writer.reviewCount} reviews
+          </Text>
         </View>
       </LinearGradient>
 
-      {/* Search and Filters */}
-      <View style={styles.searchContainer}>
-        <Searchbar
-          placeholder="Search brilliant minds..."
-          onChangeText={setSearchQuery}
-          value={searchQuery}
-          style={styles.searchBar}
-          iconColor="#015382"
-        />
-        
-        <TouchableOpacity 
-          style={styles.filterButton}
-          onPress={() => setShowFilters(!showFilters)}
-        >
-          <Text style={styles.filterButtonText}>Filters</Text>
-        </TouchableOpacity>
-      </View>
-
-      {showFilters && (
-        <View style={styles.filtersContainer}>
-          <Text style={styles.filterTitle}>Sort by:</Text>
-          <View style={styles.sortButtons}>
-            {[
-              { key: 'rating', label: '⭐ Rating' },
-              { key: 'projects', label: '🏆 Projects' },
-              { key: 'response', label: '⚡ Response' },
-              { key: 'name', label: '🔤 Name' }
-            ].map((option) => (
-              <Chip
-                key={option.key}
-                selected={sortBy === option.key}
-                onPress={() => setSortBy(option.key)}
-                style={[styles.filterChip, sortBy === option.key && styles.selectedChip]}
-                textStyle={[styles.chipText, sortBy === option.key && styles.selectedChipText]}
-              >
-                {option.label}
-              </Chip>
-            ))}
-          </View>
-
-          <Text style={styles.filterTitle}>Expertise:</Text>
-          <View style={styles.specialtyButtons}>
-            <Chip
-              selected={selectedSpecialty === 'all'}
-              onPress={() => setSelectedSpecialty('all')}
-              style={[styles.filterChip, selectedSpecialty === 'all' && styles.selectedChip]}
-              textStyle={[styles.chipText, selectedSpecialty === 'all' && styles.selectedChipText]}
-            >
-              All Areas
-            </Chip>
-            {getSpecialties().slice(0, 6).map((specialty) => (
-              <Chip
-                key={specialty}
-                selected={selectedSpecialty === specialty}
-                onPress={() => setSelectedSpecialty(specialty)}
-                style={[styles.filterChip, selectedSpecialty === specialty && styles.selectedChip]}
-                textStyle={[styles.chipText, selectedSpecialty === specialty && styles.selectedChipText]}
-              >
-                {specialty}
-              </Chip>
-            ))}
-          </View>
-        </View>
-      )}
-
-      <View style={styles.resultsHeader}>
-        <Text style={styles.resultsCount}>
-          ✨ {filteredWriters.length} exceptional minds found
-        </Text>
-      </View>
-    </View>
-  );
-
-  const renderWriter = ({ item: writer }) => (
-    <Card style={styles.writerCard}>
-      <View style={styles.cardHeader}>
-        <LinearGradient
-          colors={['#015382', '#017DB0']}
-          style={styles.cardHeaderGradient}
-        >
-          <View style={styles.onlineStatusContainer}>
-            {writer.isOnline ? (
-              <Badge size={12} style={styles.onlineBadge} />
-            ) : (
-              <Badge size={12} style={styles.offlineBadge} />
-            )}
-            <Text style={styles.statusText}>
-              {writer.isOnline ? 'Online' : 'Offline'}
+      {/* Content */}
+      <View style={styles.writerCardContent}>
+        {/* Bio */}
+        {writer.writerProfile?.bio && (
+          <View style={styles.bioSection}>
+            <Text style={[premiumText.caption, { color: colors.neutral[600], marginBottom: spacing.xs }]}>
+              About Me:
+            </Text>
+            <Text style={[premiumText.bodySmall, { color: colors.neutral[600], lineHeight: 18 }]}>
+              {writer.writerProfile.bio.length > 80 
+                ? `${writer.writerProfile.bio.substring(0, 80)}...` 
+                : writer.writerProfile.bio
+              }
             </Text>
           </View>
+        )}
 
-          <View style={styles.avatarContainer}>
-            <Avatar.Image 
-              size={80} 
-              source={{ uri: writer.avatar }}
-              style={styles.writerAvatar}
-            />
-            {writer.verified && (
-              <View style={styles.verifiedBadge}>
-                <Text style={styles.verifiedIcon}>✓</Text>
-              </View>
-            )}
-          </View>
-
-          <Text style={styles.writerName}>{writer.name}</Text>
-          
-          <View style={styles.ratingContainer}>
-            <Text style={styles.ratingText}>
-              ⭐ {writer.rating.toFixed(1)}/5.0 • {writer.reviewCount} reviews
-            </Text>
-          </View>
-        </LinearGradient>
-      </View>
-
-      <View style={styles.cardContent}>
         {/* Specialties */}
-        <View style={styles.specialtiesContainer}>
-          <Text style={styles.sectionTitle}>🎯 Expertise Areas:</Text>
+        <View style={styles.specialtiesSection}>
+          <Text style={[premiumText.caption, { color: colors.neutral[600], marginBottom: spacing.sm }]}>
+            Expertise Areas:
+          </Text>
           <View style={styles.specialtyTags}>
-            {writer.writerProfile?.specialties?.slice(0, 3).map((specialty, index) => (
-              <View key={index} style={styles.specialtyTag}>
+            {writer.writerProfile?.specialties?.slice(0, 2).map((specialty, idx) => (
+              <View key={idx} style={styles.specialtyTag}>
                 <Text style={styles.specialtyTagText}>{specialty}</Text>
               </View>
-            ))}
-            {writer.writerProfile?.specialties?.length > 3 && (
+            )) || (
               <View style={styles.specialtyTag}>
-                <Text style={styles.specialtyTagText}>
-                  +{writer.writerProfile.specialties.length - 3} more
+                <Text style={styles.specialtyTagText}>General Writing</Text>
+              </View>
+            )}
+            {writer.writerProfile?.specialties?.length > 2 && (
+              <View style={[styles.specialtyTag, { backgroundColor: colors.neutral[200] }]}>
+                <Text style={[styles.specialtyTagText, { color: colors.neutral[600] }]}>
+                  +{writer.writerProfile.specialties.length - 2}
                 </Text>
               </View>
             )}
@@ -331,439 +298,412 @@ const StudentWriterList = () => {
         </View>
 
         {/* Stats */}
-        <View style={styles.writerStats}>
+        <View style={styles.statsSection}>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{writer.projectsCompleted}+</Text>
-            <Text style={styles.statText}>🏆 Projects</Text>
+            <Text style={[premiumText.headingSmall, { color: colors.primary[600] }]}>
+              {writer.projectsCompleted}+
+            </Text>
+            <Text style={[premiumText.caption, { color: colors.neutral[500] }]}>
+              🏆 Projects
+            </Text>
           </View>
           <View style={styles.statItem}>
-            <Text style={styles.statValue}>{writer.responseTime}h</Text>
-            <Text style={styles.statText}>⚡ Response</Text>
+            <Text style={[premiumText.headingSmall, { color: colors.success[600] }]}>
+              {writer.responseTime}h
+            </Text>
+            <Text style={[premiumText.caption, { color: colors.neutral[500] }]}>
+              ⚡ Response
+            </Text>
           </View>
         </View>
 
-        {/* Bio */}
-        {writer.writerProfile?.bio && (
-          <Text style={styles.writerBio} numberOfLines={2}>
-            {writer.writerProfile.bio}
-          </Text>
-        )}
-
-        {/* Connect Button */}
-        <Button
-          mode="contained"
-          onPress={() => handleChat(writer.id)}
-          style={styles.connectButton}
-          labelStyle={styles.connectButtonText}
-          icon="message"
+        {/* Action button */}
+        <TouchableOpacity
+          style={[premiumButtons.primary, { marginTop: spacing.lg }]}
+          onPress={() => handleChat(writer._id)}
         >
-          ✨ Connect & Collaborate
-        </Button>
+          <Ionicons name="chatbubble-outline" size={18} color={colors.white} />
+          <Text style={[premiumButtons.buttonTextPrimary, { marginLeft: spacing.sm }]}>
+            Start Conversation
+          </Text>
+        </TouchableOpacity>
       </View>
-    </Card>
-  );
-
-  const renderEmpty = () => (
-    <View style={styles.emptyContainer}>
-      <Text style={styles.emptyIcon}>👥</Text>
-      <Text style={styles.emptyTitle}>No Writers Found</Text>
-      <Text style={styles.emptyText}>
-        Try adjusting your search criteria or browse all writers
-      </Text>
-      <Button
-        mode="contained"
-        onPress={() => {
-          setSearchQuery('');
-          setSelectedSpecialty('all');
-        }}
-        style={styles.clearButton}
-      >
-        Clear Filters
-      </Button>
     </View>
   );
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[premiumLayout.screen]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#015382" />
-          <Text style={styles.loadingText}>Finding expert writers for you...</Text>
+          <ActivityIndicator size="large" color={colors.primary[500]} />
+          <Text style={[premiumText.bodyLarge, { marginTop: spacing.lg, textAlign: 'center' }]}>
+            Finding expert writers for you...
+          </Text>
         </View>
       </SafeAreaView>
     );
   }
 
-  if (error && writers.length === 0) {
+  if (error) {
     return (
-      <SafeAreaView style={styles.container}>
+      <SafeAreaView style={[premiumLayout.screen]}>
         <View style={styles.errorContainer}>
-          <Text style={styles.errorIcon}>⚠️</Text>
-          <Text style={styles.errorTitle}>Unable to Load Writers</Text>
-          <Text style={styles.errorText}>{error}</Text>
-          <Button mode="contained" onPress={fetchWriters} style={styles.retryButton}>
-            Try Again
-          </Button>
+          <Ionicons name="alert-circle" size={64} color={colors.error[500]} />
+          <Text style={[premiumText.headingMedium, { marginTop: spacing.lg, textAlign: 'center' }]}>
+            Unable to Load Writers
+          </Text>
+          <Text style={[premiumText.bodyMedium, { marginTop: spacing.sm, textAlign: 'center', color: colors.neutral[500] }]}>
+            {error}
+          </Text>
+          <TouchableOpacity
+            style={[premiumButtons.primary, { marginTop: spacing.xl }]}
+            onPress={fetchWriters}
+          >
+            <Text style={premiumButtons.buttonTextPrimary}>Try Again</Text>
+          </TouchableOpacity>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <FlatList
-        data={filteredWriters}
-        renderItem={renderWriter}
-        keyExtractor={(item) => item.id}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.listContainer}
-      />
+    <SafeAreaView style={[premiumLayout.screen]}>
+      {/* Header */}
+      <LinearGradient
+        colors={colors.gradients.primary}
+        style={styles.header}
+      >
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.white} />
+          </TouchableOpacity>
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={[premiumText.headingLarge, { color: colors.white, fontWeight: '700' }]}>
+              Expert Writers
+            </Text>
+            <Text style={[premiumText.bodyMedium, { color: colors.white, opacity: 0.9, marginTop: spacing.xs }]}>
+              {filteredWriters.length} brilliant minds available
+            </Text>
+          </View>
+          <View style={{ width: 40 }} />
+        </View>
+      </LinearGradient>
+
+      {/* Search and Filters */}
+      <View style={styles.filtersContainer}>
+        {/* Search */}
+        <View style={styles.searchContainer}>
+          <Ionicons name="search" size={20} color={colors.neutral[400]} style={styles.searchIcon} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Search brilliant minds..."
+            placeholderTextColor={colors.neutral[400]}
+            value={searchTerm}
+            onChangeText={setSearchTerm}
+          />
+        </View>
+
+        {/* Specialty Filters */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}
+        >
+          {filterOptions.slice(0, 5).map(option => 
+            renderFilterChip(
+              option,
+              selectedSpecialty === option.value,
+              () => setSelectedSpecialty(option.value)
+            )
+          )}
+        </ScrollView>
+
+        {/* Sort Options */}
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filtersRow}
+        >
+          {sortOptions.map(option => 
+            renderFilterChip(
+              option,
+              sortBy === option.value,
+              () => setSortBy(option.value)
+            )
+          )}
+        </ScrollView>
+      </View>
+
+      {/* Writers List */}
+      {filteredWriters.length > 0 ? (
+        <FlatList
+          data={filteredWriters}
+          renderItem={renderWriterCard}
+          keyExtractor={(item) => item._id}
+          numColumns={2}
+          columnWrapperStyle={styles.row}
+          contentContainerStyle={styles.listContainer}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor={colors.primary[500]}
+              colors={[colors.primary[500]]}
+            />
+          }
+        />
+      ) : (
+        <View style={styles.emptyContainer}>
+          <Ionicons name="people-outline" size={64} color={colors.neutral[300]} />
+          <Text style={[premiumText.headingMedium, { marginTop: spacing.lg, textAlign: 'center' }]}>
+            No Writers Found
+          </Text>
+          <Text style={[premiumText.bodyMedium, { marginTop: spacing.sm, textAlign: 'center', color: colors.neutral[500] }]}>
+            Try adjusting your search criteria or browse all writers
+          </Text>
+          <TouchableOpacity
+            style={[premiumButtons.secondary, { marginTop: spacing.xl }]}
+            onPress={() => {
+              setSearchTerm('');
+              setSelectedSpecialty('all');
+            }}
+          >
+            <Text style={premiumButtons.buttonTextSecondary}>Clear Filters</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  listContainer: {
-    paddingBottom: 20,
-  },
   header: {
-    marginBottom: 10,
+    paddingTop: Platform.OS === 'ios' ? 44 : 24,
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.base,
+    borderBottomLeftRadius: borderRadius.xl,
+    borderBottomRightRadius: borderRadius.xl,
+    ...shadows.lg,
   },
-  headerGradient: {
-    paddingHorizontal: 20,
-    paddingVertical: 40,
-  },
+  
   headerContent: {
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: 'white',
-    textAlign: 'center',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-    marginBottom: 30,
-    lineHeight: 22,
-  },
-  statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-  },
-  statCard: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-    borderRadius: 15,
-    minWidth: 90,
+    justifyContent: 'space-between',
   },
-  statNumber: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: 'white',
-    marginBottom: 4,
+  
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  statLabel: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.9)',
-    fontWeight: '500',
+  
+  filtersContainer: {
+    backgroundColor: colors.white,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.neutral[200],
   },
+  
   searchContainer: {
     flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
     alignItems: 'center',
-    backgroundColor: 'white',
+    backgroundColor: colors.neutral[100],
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.base,
+    marginBottom: spacing.md,
+    height: 48,
   },
-  searchBar: {
+  
+  searchIcon: {
+    marginRight: spacing.sm,
+  },
+  
+  searchInput: {
     flex: 1,
-    marginRight: 10,
-    elevation: 2,
+    fontSize: typography.sizes.base,
+    color: colors.neutral[800],
   },
-  filterButton: {
-    backgroundColor: '#015382',
-    paddingHorizontal: 15,
-    paddingVertical: 12,
-    borderRadius: 8,
+  
+  filtersRow: {
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
   },
-  filterButtonText: {
-    color: 'white',
-    fontWeight: '600',
-  },
-  filtersContainer: {
-    backgroundColor: 'white',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  filterTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 10,
-    marginTop: 10,
-  },
-  sortButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginBottom: 10,
-  },
-  specialtyButtons: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
+  
   filterChip: {
-    marginRight: 8,
-    marginBottom: 8,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: colors.neutral[100],
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    marginHorizontal: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
   },
-  selectedChip: {
-    backgroundColor: '#015382',
+  
+  selectedFilterChip: {
+    backgroundColor: colors.primary[500],
+    borderColor: colors.primary[500],
   },
-  chipText: {
-    color: '#64748b',
-    fontSize: 12,
-  },
-  selectedChipText: {
-    color: 'white',
-  },
-  resultsHeader: {
-    backgroundColor: 'white',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  resultsCount: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#015382',
-  },
-  writerCard: {
-    marginHorizontal: 20,
-    marginVertical: 8,
-    borderRadius: 20,
-    elevation: 4,
-    overflow: 'hidden',
-  },
-  cardHeader: {
-    overflow: 'hidden',
-  },
-  cardHeaderGradient: {
-    paddingVertical: 25,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    position: 'relative',
-  },
-  onlineStatusContainer: {
-    position: 'absolute',
-    top: 15,
-    right: 15,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  onlineBadge: {
-    backgroundColor: '#22c55e',
-    marginRight: 5,
-  },
-  offlineBadge: {
-    backgroundColor: '#64748b',
-    marginRight: 5,
-  },
-  statusText: {
-    color: 'white',
-    fontSize: 12,
+  
+  filterChipText: {
+    ...typography.fonts.caption,
+    fontSize: typography.sizes.sm,
+    color: colors.neutral[600],
     fontWeight: '500',
   },
+  
+  selectedFilterChipText: {
+    color: colors.white,
+  },
+  
+  listContainer: {
+    padding: spacing.base,
+    paddingBottom: spacing.xl,
+  },
+  
+  row: {
+    justifyContent: 'space-between',
+  },
+  
+  writerCard: {
+    width: (width - spacing.base * 3) / 2,
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.lg,
+    marginBottom: spacing.lg,
+    overflow: 'hidden',
+    ...shadows.md,
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+  },
+  
+  writerCardHeader: {
+    padding: spacing.lg,
+    alignItems: 'center',
+    position: 'relative',
+  },
+  
+  onlineStatus: {
+    position: 'absolute',
+    top: spacing.sm,
+    right: spacing.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  
+  statusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  
   avatarContainer: {
     position: 'relative',
-    marginBottom: 15,
   },
+  
   writerAvatar: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: colors.neutral[200],
     borderWidth: 3,
-    borderColor: 'white',
+    borderColor: colors.white,
   },
-  verifiedBadge: {
+  
+  verificationBadge: {
     position: 'absolute',
     bottom: 0,
     right: 0,
-    backgroundColor: '#22c55e',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: colors.success[500],
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: 'white',
+    borderColor: colors.white,
   },
-  verifiedIcon: {
-    color: 'white',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  writerName: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: 'white',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
+  
   ratingContainer: {
     alignItems: 'center',
+    marginTop: spacing.sm,
   },
-  ratingText: {
-    color: 'rgba(255,255,255,0.9)',
-    fontSize: 14,
-    fontWeight: '500',
+  
+  stars: {
+    flexDirection: 'row',
+    gap: 2,
   },
-  cardContent: {
-    padding: 20,
+  
+  writerCardContent: {
+    padding: spacing.lg,
   },
-  specialtiesContainer: {
-    marginBottom: 20,
+  
+  bioSection: {
+    marginBottom: spacing.lg,
   },
-  sectionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 10,
+  
+  specialtiesSection: {
+    marginBottom: spacing.lg,
   },
+  
   specialtyTags: {
     flexDirection: 'row',
     flexWrap: 'wrap',
+    gap: spacing.xs,
   },
+  
   specialtyTag: {
-    backgroundColor: '#015382',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    marginRight: 8,
-    marginBottom: 8,
+    backgroundColor: colors.primary[100],
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.sm,
   },
+  
   specialtyTagText: {
-    color: 'white',
-    fontSize: 12,
+    fontSize: typography.sizes.xs,
+    color: colors.primary[700],
     fontWeight: '600',
   },
-  writerStats: {
+  
+  statsSection: {
     flexDirection: 'row',
-    backgroundColor: '#f8fafc',
-    borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
     justifyContent: 'space-around',
+    backgroundColor: colors.neutral[50],
+    borderRadius: borderRadius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
+  
   statItem: {
     alignItems: 'center',
   },
-  statValue: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#015382',
-    marginBottom: 4,
-  },
-  statText: {
-    fontSize: 12,
-    color: '#64748b',
-    fontWeight: '500',
-  },
-  writerBio: {
-    fontSize: 14,
-    color: '#64748b',
-    lineHeight: 20,
-    marginBottom: 20,
-  },
-  connectButton: {
-    backgroundColor: '#015382',
-    borderRadius: 15,
-    paddingVertical: 8,
-  },
-  connectButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: 'white',
-  },
+  
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    padding: spacing.xl,
   },
-  loadingText: {
-    marginTop: 15,
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '500',
-  },
+  
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
+    padding: spacing.xl,
   },
-  errorIcon: {
-    fontSize: 48,
-    marginBottom: 15,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 20,
-    lineHeight: 22,
-  },
-  retryButton: {
-    backgroundColor: '#015382',
-  },
+  
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
-  },
-  emptyIcon: {
-    fontSize: 64,
-    marginBottom: 20,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 25,
-    lineHeight: 22,
-  },
-  clearButton: {
-    backgroundColor: '#015382',
+    padding: spacing.xl,
   },
 });
 

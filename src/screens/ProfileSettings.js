@@ -1,52 +1,66 @@
-import React, { useState, useEffect } from 'react';
+// ThinqScribe/src/screens/ProfileSettings.js - Mobile Profile Settings
+
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
-  StyleSheet,
   ScrollView,
-  Alert,
   TouchableOpacity,
-  Image,
-  Platform,
-  KeyboardAvoidingView,
-} from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
+  StyleSheet,
+  Alert,
+  SafeAreaView,
   TextInput,
-  Button,
-  Avatar,
-  Card,
-  Switch,
+  Image,
   ActivityIndicator,
-  Snackbar,
-} from 'react-native-paper';
-import { LinearGradient } from 'expo-linear-gradient';
+  Switch,
+  Dimensions,
+  Platform,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../context/AuthContext';
-import { useAppLoading } from '../context/AppLoadingContext';
+import { useNotifications } from '../context/NotificationContext';
 import { updateUserProfile, uploadProfilePicture } from '../api/user';
 
-const ProfileSettings = () => {
-  const { user, updateUser, isAuthenticated } = useAuth();
-  const { setLoading: setGlobalLoading } = useAppLoading();
+// Import premium design system
+import { colors, typography, shadows, spacing, borderRadius } from '../styles/designSystem';
+import { 
+  premiumCards, 
+  premiumText, 
+  premiumButtons, 
+  premiumLayout 
+} from '../styles/premiumComponents';
 
-  // Form state
+const { width, height } = Dimensions.get('window');
+
+const ProfileSettings = ({ navigation }) => {
+  const { user, isAuthenticated, updateUser } = useAuth();
+  const { socket } = useNotifications();
+
+  // Generate fallback avatar URL
+  const getFallbackAvatar = () => {
+    return `https://api.dicebear.com/7.x/initials/svg?seed=${user?.name || 'User'}&backgroundColor=015382&textColor=ffffff`;
+  };
+
+  // State management
+  const [activeTab, setActiveTab] = useState('profile');
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [imageLoading, setImageLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
+
+  // Form states
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     phone: '',
     bio: '',
+    writerBio: ''
   });
 
-  // UI state
-  const [activeTab, setActiveTab] = useState('profile');
-  const [isLoading, setIsLoading] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [success, setSuccess] = useState('');
-  const [error, setError] = useState('');
-
-  // Notification settings
+  // Notification preferences
   const [notificationSettings, setNotificationSettings] = useState({
     emailNotifications: true,
     pushNotifications: true,
@@ -55,43 +69,46 @@ const ProfileSettings = () => {
     marketingEmails: false,
   });
 
+  // Initialize form data
   useEffect(() => {
-    if (user) {
-      setFormData({
-        name: user.name || '',
-        email: user.email || '',
-        phone: user.phone || '',
-        bio: user.bio || '',
-      });
-
-      if (user.avatar) {
-        setPreviewUrl(user.avatar);
-      }
-
-      // Load notification settings from user preferences
-      if (user.notificationSettings) {
-        setNotificationSettings({
-          ...notificationSettings,
-          ...user.notificationSettings,
-        });
-      }
+    if (!isAuthenticated) {
+      navigation.navigate('Login');
+      return;
     }
-  }, [user]);
 
+    setFormData({
+      name: user?.name || '',
+      email: user?.email || '',
+      phone: user?.phone || '',
+      bio: user?.bio || '',
+      writerBio: user?.writerProfile?.bio || '',
+    });
+
+    // Set preview URL
+    if (user?.avatar) {
+      setPreviewUrl(user.avatar);
+    } else if (user?.name) {
+      setPreviewUrl(getFallbackAvatar());
+    }
+  }, [isAuthenticated, user, navigation]);
+
+  // Handle form input changes
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
       ...prev,
-      [field]: value,
+      [field]: value
     }));
+    setError(null);
   };
 
-  const pickImage = async () => {
+  // Handle image selection
+  const handleImagePicker = async () => {
     try {
       // Request permission
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       
       if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Permission to access camera roll is required!');
+        Alert.alert('Permission required', 'Camera roll permission is needed to select photos.');
         return;
       }
 
@@ -101,6 +118,7 @@ const ProfileSettings = () => {
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
+        base64: false,
       });
 
       if (!result.canceled && result.assets[0]) {
@@ -108,537 +126,561 @@ const ProfileSettings = () => {
         
         // Check file size (2MB limit)
         if (asset.fileSize && asset.fileSize > 2 * 1024 * 1024) {
-          Alert.alert('File Too Large', 'Please select an image smaller than 2MB.');
+          Alert.alert('File too large', 'Image must be smaller than 2MB.');
           return;
         }
 
+        setImageLoading(true);
         setPreviewUrl(asset.uri);
-        setSelectedFile(asset);
-        setError('');
+        
+        // Upload image
+        await handleImageUpload(asset);
       }
-    } catch (err) {
-      console.error('Error picking image:', err);
+    } catch (error) {
+      console.error('Image picker error:', error);
       Alert.alert('Error', 'Failed to select image. Please try again.');
+      setImageLoading(false);
     }
   };
 
-  const takePhoto = async () => {
+  // Handle image upload
+  const handleImageUpload = async (asset) => {
     try {
-      // Request permission
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Permission to access camera is required!');
-        return;
-      }
-
-      // Launch camera
-      const result = await ImagePicker.launchCameraAsync({
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
+      const formData = new FormData();
+      formData.append('file', {
+        uri: asset.uri,
+        type: asset.type || 'image/jpeg',
+        name: asset.fileName || 'profile.jpg',
       });
 
-      if (!result.canceled && result.assets[0]) {
-        const asset = result.assets[0];
-        setPreviewUrl(asset.uri);
-        setSelectedFile(asset);
-        setError('');
-      }
-    } catch (err) {
-      console.error('Error taking photo:', err);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
+      const avatarUrl = await uploadProfilePicture(formData);
+      
+      // Update user profile with new avatar
+      const updatedUser = await updateUserProfile({ avatar: avatarUrl });
+      updateUser(updatedUser);
+      
+      setSuccess('Profile picture updated successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (error) {
+      console.error('Image upload error:', error);
+      setError('Failed to upload image. Please try again.');
+      setPreviewUrl(user?.avatar || getFallbackAvatar());
+    } finally {
+      setImageLoading(false);
     }
   };
 
-  const showImageOptions = () => {
-    Alert.alert(
-      'Profile Picture',
-      'Choose an option',
-      [
-        { text: 'Camera', onPress: takePhoto },
-        { text: 'Gallery', onPress: pickImage },
-        { text: 'Cancel', style: 'cancel' },
-      ],
-      { cancelable: true }
-    );
-  };
-
+  // Handle profile update
   const handleUpdateProfile = async () => {
+    if (!formData.name.trim()) {
+      setError('Name is required');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    setSuccess(null);
+
     try {
-      setIsLoading(true);
-      setError('');
-      setSuccess('');
-
-      console.log('📱 [ProfileSettings] Updating profile...');
-
-      // Upload avatar if selected
-      let avatarUrl = user?.avatar;
-      
-      if (selectedFile) {
-        console.log('📱 [ProfileSettings] Uploading avatar...');
-        
-        const formData = new FormData();
-        formData.append('file', {
-          uri: selectedFile.uri,
-          type: selectedFile.type || 'image/jpeg',
-          name: selectedFile.fileName || 'avatar.jpg',
-        });
-
-        avatarUrl = await uploadProfilePicture(formData);
-        console.log('📱 [ProfileSettings] Avatar uploaded:', avatarUrl);
-        setSelectedFile(null);
-      }
-
-      // Update profile
       const profileUpdateData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        bio: formData.bio,
-        avatar: avatarUrl,
-        notificationSettings,
+        name: formData.name.trim(),
+        phone: formData.phone.trim(),
+        bio: formData.bio.trim(),
       };
 
-      console.log('📱 [ProfileSettings] Updating profile data:', profileUpdateData);
-      
+      // Add writer profile bio if user is a writer
+      if (user?.role === 'writer' && formData.writerBio !== undefined) {
+        profileUpdateData.writerProfile = {
+          ...user.writerProfile,
+          bio: formData.writerBio.trim()
+        };
+      }
+
       const updatedUserData = await updateUserProfile(profileUpdateData);
-      console.log('📱 [ProfileSettings] Profile updated:', updatedUserData);
-      
       updateUser(updatedUserData);
-      setPreviewUrl(updatedUserData.avatar || avatarUrl);
       
       setFormData({
+        ...formData,
         name: updatedUserData.name,
-        email: updatedUserData.email,
-        phone: updatedUserData.phone,
-        bio: updatedUserData.bio,
+        phone: updatedUserData.phone || '',
+        bio: updatedUserData.bio || '',
+        writerBio: updatedUserData.writerProfile?.bio || '',
       });
 
-      setSuccess('Profile updated successfully!');
-      
-      // Auto-hide success message
-      setTimeout(() => setSuccess(''), 3000);
-      
-    } catch (err) {
-      console.error('📱 [ProfileSettings] Profile update error:', err);
-      setError(err.message || 'Failed to update profile.');
-      
-      // Reset avatar on error
-      if (user?.avatar) {
-        setPreviewUrl(user.avatar);
+      // Emit socket event for real-time marketplace updates
+      if (socket && user?.role === 'writer' && formData.writerBio !== user?.writerProfile?.bio) {
+        socket.emit('writerProfileUpdate', {
+          writerId: user._id,
+          updatedFields: {
+            bio: formData.writerBio,
+            name: updatedUserData.name,
+            avatar: updatedUserData.avatar
+          }
+        });
       }
-      setSelectedFile(null);
+
+      setSuccess('Profile updated successfully!');
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err) {
+      console.error('Profile update error:', err);
+      setError(err.message || 'Failed to update profile.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Handle notification settings change
   const handleNotificationChange = (key, value) => {
     setNotificationSettings(prev => ({
       ...prev,
-      [key]: value,
+      [key]: value
     }));
+    setSuccess('Notification preferences updated!');
+    setTimeout(() => setSuccess(null), 2000);
   };
 
+  const tabs = [
+    { key: 'profile', label: 'Profile', icon: 'person-outline' },
+    { key: 'notifications', label: 'Notifications', icon: 'notifications-outline' }
+  ];
+
+  const renderTabButton = (tab) => (
+    <TouchableOpacity
+      key={tab.key}
+      style={[
+        styles.tabButton,
+        activeTab === tab.key && styles.activeTabButton
+      ]}
+      onPress={() => setActiveTab(tab.key)}
+    >
+      <Ionicons 
+        name={tab.icon} 
+        size={20} 
+        color={activeTab === tab.key ? colors.primary[600] : colors.neutral[500]} 
+      />
+      <Text style={[
+        premiumText.bodySemibold,
+        { 
+          color: activeTab === tab.key ? colors.primary[600] : colors.neutral[500],
+          marginLeft: spacing.xs
+        }
+      ]}>
+        {tab.label}
+      </Text>
+    </TouchableOpacity>
+  );
+
   const renderProfileTab = () => (
-    <ScrollView style={styles.tabContent}>
+    <View style={{ flex: 1 }}>
       {/* Avatar Section */}
       <View style={styles.avatarSection}>
-        <TouchableOpacity onPress={showImageOptions} style={styles.avatarContainer}>
-          <Avatar.Image 
-            size={120} 
-            source={{ 
-              uri: previewUrl || `https://api.dicebear.com/7.x/initials/svg?seed=${user?.name}` 
-            }}
+        <View style={styles.avatarContainer}>
+          {imageLoading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color={colors.primary[500]} />
+            </View>
+          )}
+          <Image
+            source={{ uri: previewUrl || getFallbackAvatar() }}
             style={styles.avatar}
+            onLoadStart={() => setImageLoading(true)}
+            onLoadEnd={() => setImageLoading(false)}
+            onError={() => {
+              setImageLoading(false);
+              setPreviewUrl(getFallbackAvatar());
+            }}
           />
-          <View style={styles.avatarOverlay}>
-            <Text style={styles.avatarOverlayText}>📷</Text>
-          </View>
-        </TouchableOpacity>
-        
-        <Text style={styles.avatarHint}>Tap to change photo</Text>
-        <Text style={styles.avatarSubtext}>JPG, PNG • Max 2MB</Text>
+          <TouchableOpacity 
+            style={styles.cameraButton}
+            onPress={handleImagePicker}
+          >
+            <Ionicons name="camera" size={20} color={colors.white} />
+          </TouchableOpacity>
+        </View>
+        <Text style={[premiumText.headingMedium, { textAlign: 'center', marginTop: spacing.md }]}>
+          {user?.name}
+        </Text>
+        <Text style={[premiumText.bodyMedium, { textAlign: 'center', color: colors.neutral[500], textTransform: 'capitalize' }]}>
+          {user?.role}
+        </Text>
+        <Text style={[premiumText.caption, { textAlign: 'center', color: colors.neutral[400], marginTop: spacing.xs }]}>
+          JPG, PNG • Max 2MB
+        </Text>
       </View>
 
-      {/* Form Fields */}
+      {/* Form Section */}
       <View style={styles.formSection}>
-        <Text style={styles.sectionTitle}>Personal Information</Text>
-        
-        <TextInput
-          label="Full Name"
-          value={formData.name}
-          onChangeText={(value) => handleInputChange('name', value)}
-          style={styles.input}
-          mode="outlined"
-          outlineColor="#e2e8f0"
-          activeOutlineColor="#015382"
-        />
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Full Name</Text>
+          <TextInput
+            style={styles.textInput}
+            value={formData.name}
+            onChangeText={(text) => handleInputChange('name', text)}
+            placeholder="Enter your full name"
+            placeholderTextColor={colors.neutral[400]}
+          />
+        </View>
 
-        <TextInput
-          label="Email Address"
-          value={formData.email}
-          onChangeText={(value) => handleInputChange('email', value)}
-          style={styles.input}
-          mode="outlined"
-          outlineColor="#e2e8f0"
-          activeOutlineColor="#015382"
-          keyboardType="email-address"
-          disabled
-        />
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Email Address</Text>
+          <TextInput
+            style={[styles.textInput, styles.disabledInput]}
+            value={formData.email}
+            placeholder="Enter your email"
+            placeholderTextColor={colors.neutral[400]}
+            editable={false}
+          />
+          <Text style={[premiumText.caption, { color: colors.neutral[400], marginTop: spacing.xs }]}>
+            Email cannot be changed
+          </Text>
+        </View>
 
-        <TextInput
-          label="Phone Number"
-          value={formData.phone}
-          onChangeText={(value) => handleInputChange('phone', value)}
-          style={styles.input}
-          mode="outlined"
-          outlineColor="#e2e8f0"
-          activeOutlineColor="#015382"
-          keyboardType="phone-pad"
-        />
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Phone Number</Text>
+          <TextInput
+            style={styles.textInput}
+            value={formData.phone}
+            onChangeText={(text) => handleInputChange('phone', text)}
+            placeholder="Enter your phone number"
+            placeholderTextColor={colors.neutral[400]}
+            keyboardType="phone-pad"
+          />
+        </View>
 
-        <TextInput
-          label="Bio"
-          value={formData.bio}
-          onChangeText={(value) => handleInputChange('bio', value)}
-          style={styles.input}
-          mode="outlined"
-          outlineColor="#e2e8f0"
-          activeOutlineColor="#015382"
-          multiline
-          numberOfLines={4}
-          maxLength={200}
-        />
-        
-        <Text style={styles.charCount}>{formData.bio.length}/200 characters</Text>
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>Bio</Text>
+          <TextInput
+            style={[styles.textInput, styles.textArea]}
+            value={formData.bio}
+            onChangeText={(text) => handleInputChange('bio', text)}
+            placeholder="Tell us a bit about yourself..."
+            placeholderTextColor={colors.neutral[400]}
+            multiline
+            numberOfLines={4}
+            maxLength={200}
+          />
+          <Text style={[premiumText.caption, { color: colors.neutral[500], marginTop: spacing.xs }]}>
+            {formData.bio.length}/200 characters
+          </Text>
+        </View>
+
+        {/* Writer-specific bio field */}
+        {user?.role === 'writer' && (
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Professional Bio (Marketplace)</Text>
+            <TextInput
+              style={[styles.textInput, styles.textArea, { height: 120 }]}
+              value={formData.writerBio}
+              onChangeText={(text) => handleInputChange('writerBio', text)}
+              placeholder="Describe your professional experience, skills, and what makes you stand out as a writer. This will be displayed in the marketplace..."
+              placeholderTextColor={colors.neutral[400]}
+              multiline
+              numberOfLines={6}
+              maxLength={1000}
+            />
+            <Text style={[premiumText.caption, { color: colors.neutral[500], marginTop: spacing.xs }]}>
+              {formData.writerBio.length}/1000 characters - This appears in the marketplace
+            </Text>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[
+            premiumButtons.primary,
+            { marginTop: spacing.lg },
+            isLoading && { opacity: 0.7 }
+          ]}
+          onPress={handleUpdateProfile}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <ActivityIndicator size="small" color={colors.white} />
+          ) : (
+            <Text style={premiumButtons.buttonTextPrimary}>Save Changes</Text>
+          )}
+        </TouchableOpacity>
       </View>
-
-      {/* Save Button */}
-      <Button
-        mode="contained"
-        onPress={handleUpdateProfile}
-        loading={isLoading}
-        disabled={isLoading}
-        style={styles.saveButton}
-        labelStyle={styles.saveButtonText}
-      >
-        {isLoading ? 'Saving...' : 'Save Changes'}
-      </Button>
-    </ScrollView>
+    </View>
   );
 
   const renderNotificationsTab = () => (
-    <ScrollView style={styles.tabContent}>
-      <Text style={styles.sectionTitle}>Notification Preferences</Text>
-      <Text style={styles.sectionSubtitle}>
-        Choose what notifications you'd like to receive
-      </Text>
-
-      <View style={styles.notificationsList}>
-        {Object.entries(notificationSettings).map(([key, value]) => (
-          <Card key={key} style={styles.notificationCard}>
-            <View style={styles.notificationItem}>
-              <View style={styles.notificationInfo}>
-                <Text style={styles.notificationTitle}>
-                  {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
-                </Text>
-                <Text style={styles.notificationDescription}>
-                  {getNotificationDescription(key)}
-                </Text>
-              </View>
-              <Switch
-                value={value}
-                onValueChange={(newValue) => handleNotificationChange(key, newValue)}
-                color="#015382"
-              />
-            </View>
-          </Card>
-        ))}
+    <View style={{ flex: 1 }}>
+      <View style={styles.notificationHeader}>
+        <Text style={[premiumText.headingLarge, { marginBottom: spacing.sm }]}>
+          Notification Preferences
+        </Text>
+        <Text style={[premiumText.bodyMedium, { color: colors.neutral[500] }]}>
+          Choose what notifications you'd like to receive
+        </Text>
       </View>
 
-      {/* Save Button */}
-      <Button
-        mode="contained"
-        onPress={handleUpdateProfile}
-        loading={isLoading}
-        disabled={isLoading}
-        style={styles.saveButton}
-        labelStyle={styles.saveButtonText}
-      >
-        {isLoading ? 'Saving...' : 'Save Preferences'}
-      </Button>
-    </ScrollView>
+      <View style={styles.notificationList}>
+        {Object.entries(notificationSettings).map(([key, value]) => (
+          <View key={key} style={styles.notificationItem}>
+            <View style={{ flex: 1 }}>
+              <Text style={[premiumText.bodySemibold, { marginBottom: spacing.xs }]}>
+                {key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())}
+              </Text>
+              <Text style={[premiumText.bodySmall, { color: colors.neutral[500] }]}>
+                {key === 'emailNotifications' && 'Receive notifications via email'}
+                {key === 'pushNotifications' && 'Receive push notifications'}
+                {key === 'assignmentUpdates' && 'Get notified about assignment progress'}
+                {key === 'paymentReminders' && 'Reminders for upcoming payments'}
+                {key === 'marketingEmails' && 'Receive updates about new features and offers'}
+              </Text>
+            </View>
+            <Switch
+              value={value}
+              onValueChange={(newValue) => handleNotificationChange(key, newValue)}
+              trackColor={{ false: colors.neutral[300], true: colors.primary[200] }}
+              thumbColor={value ? colors.primary[500] : colors.neutral[400]}
+              ios_backgroundColor={colors.neutral[300]}
+            />
+          </View>
+        ))}
+      </View>
+    </View>
   );
 
-  const getNotificationDescription = (key) => {
-    const descriptions = {
-      emailNotifications: 'Receive notifications via email',
-      pushNotifications: 'Receive push notifications on your device',
-      assignmentUpdates: 'Get notified about assignment progress and updates',
-      paymentReminders: 'Reminders for upcoming payments and due dates',
-      marketingEmails: 'Receive updates about new features and special offers',
-    };
-    return descriptions[key] || '';
-  };
-
-  if (!isAuthenticated || !user) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#015382" />
-          <Text style={styles.loadingText}>Loading profile...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
   return (
-    <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+    <SafeAreaView style={[premiumLayout.screen]}>
+      {/* Header */}
+      <LinearGradient
+        colors={colors.gradients.primary}
+        style={styles.header}
       >
-        {/* Header */}
-        <LinearGradient colors={['#015382', '#017DB0']} style={styles.header}>
-          <Text style={styles.headerTitle}>Account Settings</Text>
-          <Text style={styles.headerSubtitle}>Manage your profile and preferences</Text>
-        </LinearGradient>
+        <View style={styles.headerContent}>
+          <TouchableOpacity 
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.white} />
+          </TouchableOpacity>
+          <Text style={[premiumText.headingLarge, { color: colors.white, fontWeight: '700' }]}>
+            Account Settings
+          </Text>
+          <View style={{ width: 40 }} />
+        </View>
+      </LinearGradient>
+
+      <View style={{ flex: 1 }}>
+        {/* Success/Error Messages */}
+        {success && (
+          <View style={styles.successMessage}>
+            <Ionicons name="checkmark-circle" size={20} color={colors.success[600]} />
+            <Text style={[premiumText.bodyMedium, { color: colors.success[700], marginLeft: spacing.sm }]}>
+              {success}
+            </Text>
+          </View>
+        )}
+
+        {error && (
+          <View style={styles.errorMessage}>
+            <Ionicons name="alert-circle" size={20} color={colors.error[600]} />
+            <Text style={[premiumText.bodyMedium, { color: colors.error[700], marginLeft: spacing.sm }]}>
+              {error}
+            </Text>
+          </View>
+        )}
 
         {/* Tabs */}
         <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'profile' && styles.activeTab]}
-            onPress={() => setActiveTab('profile')}
-          >
-            <Text style={[styles.tabText, activeTab === 'profile' && styles.activeTabText]}>
-              👤 Profile
-            </Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'notifications' && styles.activeTab]}
-            onPress={() => setActiveTab('notifications')}
-          >
-            <Text style={[styles.tabText, activeTab === 'notifications' && styles.activeTabText]}>
-              🔔 Notifications
-            </Text>
-          </TouchableOpacity>
+          {tabs.map(renderTabButton)}
         </View>
 
         {/* Tab Content */}
-        <View style={styles.contentContainer}>
+        <ScrollView 
+          style={{ flex: 1 }}
+          contentContainerStyle={styles.tabContent}
+          showsVerticalScrollIndicator={false}
+        >
           {activeTab === 'profile' ? renderProfileTab() : renderNotificationsTab()}
-        </View>
-
-        {/* Success/Error Messages */}
-        <Snackbar
-          visible={!!success}
-          onDismiss={() => setSuccess('')}
-          duration={3000}
-          style={styles.successSnackbar}
-        >
-          ✅ {success}
-        </Snackbar>
-
-        <Snackbar
-          visible={!!error}
-          onDismiss={() => setError('')}
-          duration={5000}
-          style={styles.errorSnackbar}
-        >
-          ❌ {error}
-        </Snackbar>
-      </KeyboardAvoidingView>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 };
 
-const getNotificationDescription = (key) => {
-  const descriptions = {
-    emailNotifications: 'Receive notifications via email',
-    pushNotifications: 'Receive push notifications on your device',
-    assignmentUpdates: 'Get notified about assignment progress and updates',
-    paymentReminders: 'Reminders for upcoming payments and due dates',
-    marketingEmails: 'Receive updates about new features and special offers',
-  };
-  return descriptions[key] || '';
-};
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8fafc',
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 15,
-    fontSize: 16,
-    color: '#64748b',
-    fontWeight: '500',
-  },
   header: {
-    paddingHorizontal: 20,
-    paddingVertical: 30,
-    alignItems: 'center',
+    paddingTop: Platform.OS === 'ios' ? 44 : 24,
+    paddingBottom: spacing.lg,
+    paddingHorizontal: spacing.base,
+    borderBottomLeftRadius: borderRadius.xl,
+    borderBottomRightRadius: borderRadius.xl,
+    ...shadows.lg,
   },
-  headerTitle: {
-    fontSize: 28,
-    fontWeight: '800',
-    color: 'white',
-    marginBottom: 8,
-  },
-  headerSubtitle: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
-    textAlign: 'center',
-  },
-  tabsContainer: {
-    flexDirection: 'row',
-    backgroundColor: 'white',
-    borderBottomWidth: 1,
-    borderBottomColor: '#e2e8f0',
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 15,
-    alignItems: 'center',
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
-  },
-  activeTab: {
-    borderBottomColor: '#015382',
-  },
-  tabText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#64748b',
-  },
-  activeTabText: {
-    color: '#015382',
-  },
-  contentContainer: {
-    flex: 1,
-    backgroundColor: 'white',
-  },
-  tabContent: {
-    flex: 1,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  avatarSection: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  avatarContainer: {
-    position: 'relative',
-    marginBottom: 15,
-  },
-  avatar: {
-    borderWidth: 4,
-    borderColor: '#e2e8f0',
-  },
-  avatarOverlay: {
-    position: 'absolute',
-    bottom: 0,
-    right: 0,
-    backgroundColor: '#015382',
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 3,
-    borderColor: 'white',
-  },
-  avatarOverlayText: {
-    fontSize: 16,
-  },
-  avatarHint: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
-  },
-  avatarSubtext: {
-    fontSize: 12,
-    color: '#64748b',
-  },
-  formSection: {
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginBottom: 8,
-  },
-  sectionSubtitle: {
-    fontSize: 14,
-    color: '#64748b',
-    marginBottom: 20,
-    lineHeight: 20,
-  },
-  input: {
-    marginBottom: 15,
-    backgroundColor: 'white',
-  },
-  charCount: {
-    fontSize: 12,
-    color: '#64748b',
-    textAlign: 'right',
-    marginTop: -10,
-    marginBottom: 10,
-  },
-  notificationsList: {
-    marginBottom: 30,
-  },
-  notificationCard: {
-    marginBottom: 12,
-    elevation: 2,
-  },
-  notificationItem: {
+  
+  headerContent: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 15,
   },
-  notificationInfo: {
+  
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  successMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success[50],
+    padding: spacing.base,
+    marginHorizontal: spacing.base,
+    marginTop: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.success[200],
+  },
+  
+  errorMessage: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.error[50],
+    padding: spacing.base,
+    marginHorizontal: spacing.base,
+    marginTop: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.error[200],
+  },
+  
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: colors.neutral[100],
+    marginHorizontal: spacing.base,
+    marginTop: spacing.lg,
+    borderRadius: borderRadius.md,
+    padding: spacing.xs,
+  },
+  
+  tabButton: {
     flex: 1,
-    marginRight: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: borderRadius.sm,
   },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1e293b',
-    marginBottom: 4,
+  
+  activeTabButton: {
+    backgroundColor: colors.white,
+    ...shadows.sm,
   },
-  notificationDescription: {
-    fontSize: 14,
-    color: '#64748b',
-    lineHeight: 18,
+  
+  tabContent: {
+    padding: spacing.base,
+    paddingBottom: spacing.xl,
   },
-  saveButton: {
-    backgroundColor: '#015382',
-    borderRadius: 12,
-    paddingVertical: 8,
-    marginTop: 20,
-    marginBottom: 40,
+  
+  avatarSection: {
+    alignItems: 'center',
+    marginBottom: spacing.xl,
   },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '700',
+  
+  avatarContainer: {
+    position: 'relative',
   },
-  successSnackbar: {
-    backgroundColor: '#22c55e',
+  
+  avatar: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: colors.neutral[200],
+    borderWidth: 4,
+    borderColor: colors.white,
+    ...shadows.lg,
   },
-  errorSnackbar: {
-    backgroundColor: '#ef4444',
+  
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.8)',
+    borderRadius: 60,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  
+  cameraButton: {
+    position: 'absolute',
+    bottom: 5,
+    right: 5,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary[500],
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: colors.white,
+    ...shadows.md,
+  },
+  
+  formSection: {
+    flex: 1,
+  },
+  
+  inputGroup: {
+    marginBottom: spacing.lg,
+  },
+  
+  inputLabel: {
+    ...typography.fonts.bodySemibold,
+    fontSize: typography.sizes.sm,
+    color: colors.neutral[700],
+    marginBottom: spacing.sm,
+  },
+  
+  textInput: {
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.neutral[300],
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    fontSize: typography.sizes.base,
+    color: colors.neutral[800],
+    ...shadows.sm,
+  },
+  
+  disabledInput: {
+    backgroundColor: colors.neutral[100],
+    color: colors.neutral[500],
+  },
+  
+  textArea: {
+    height: 80,
+    textAlignVertical: 'top',
+  },
+  
+  notificationHeader: {
+    marginBottom: spacing.xl,
+  },
+  
+  notificationList: {
+    flex: 1,
+  },
+  
+  notificationItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.white,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
+    borderRadius: borderRadius.md,
+    borderWidth: 1,
+    borderColor: colors.neutral[200],
+    ...shadows.sm,
   },
 });
 

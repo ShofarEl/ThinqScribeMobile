@@ -13,11 +13,43 @@ import {
   Platform
 } from 'react-native';
 import { Button, Chip } from 'react-native-paper';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { MaterialCommunityIcons as Icon } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useCurrency } from '../hooks/useCurrency';
-import moment from 'moment';
+
+// Import premium design system
+import { colors, typography, shadows, spacing, borderRadius } from '../styles/designSystem';
+import { 
+  premiumCards, 
+  premiumText, 
+  premiumButtons, 
+  premiumStatus, 
+  premiumLayout 
+} from '../styles/premiumComponents';
+// Using native Date methods instead of moment
+
+// Date formatting helper functions
+const formatDateTime = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[d.getMonth()];
+  const day = d.getDate().toString().padStart(2, '0');
+  const year = d.getFullYear();
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  return `${month} ${day}, ${year} at ${hours}:${minutes}`;
+};
+
+const formatDate = (date) => {
+  if (!date) return '';
+  const d = new Date(date);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[d.getMonth()];
+  const day = d.getDate().toString().padStart(2, '0');
+  return `${month} ${day}`;
+};
 
 const { width, height } = Dimensions.get('window');
 
@@ -234,17 +266,19 @@ const CreateAgreementModal = ({
       presentationStyle="pageSheet"
       onRequestClose={onClose}
     >
-      <View style={styles.container}>
-        {/* Header */}
+      <View style={[premiumLayout.screen]}>
+        {/* Premium Header */}
         <LinearGradient
-          colors={['#1e3a8a', '#3b82f6']}
-          style={styles.header}
+          colors={colors.gradients.primary}
+          style={styles.modernHeader}
         >
           <View style={styles.headerContent}>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Icon name="close" size={24} color="white" />
+            <TouchableOpacity onPress={onClose} style={styles.modernCloseButton}>
+              <Icon name="close" size={24} color={colors.white} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Create Service Agreement</Text>
+            <Text style={[premiumText.headingLarge, { color: colors.white, fontWeight: '700' }]}>
+              Create Service Agreement
+            </Text>
             <View style={styles.headerSpacer} />
           </View>
         </LinearGradient>
@@ -322,7 +356,7 @@ const CreateAgreementModal = ({
               >
                 <Icon name="calendar" size={20} color="#6b7280" />
                 <Text style={styles.dateText}>
-                  {moment(formData.deadline).format('MMM DD, YYYY [at] HH:mm')}
+                  {formatDateTime(formData.deadline)}
                 </Text>
               </TouchableOpacity>
               {errors.deadline && <Text style={styles.errorText}>{errors.deadline}</Text>}
@@ -408,7 +442,7 @@ const CreateAgreementModal = ({
                     >
                       <Icon name="calendar" size={16} color="#6b7280" />
                       <Text style={styles.smallDateText}>
-                        {moment(installment.dueDate).format('MMM DD')}
+                        {formatDate(installment.dueDate)}
                       </Text>
                     </TouchableOpacity>
                     {errors[`installment_${index}_date`] && (
@@ -492,12 +526,23 @@ const CreateAgreementModal = ({
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc'
+    backgroundColor: colors.neutral[50]
   },
-  header: {
+  modernHeader: {
     paddingTop: 44,
-    paddingBottom: 16,
-    paddingHorizontal: 16
+    paddingBottom: spacing.xl,
+    paddingHorizontal: spacing.base,
+    borderBottomLeftRadius: borderRadius.xl,
+    borderBottomRightRadius: borderRadius.xl,
+    ...shadows.lg,
+  },
+  modernCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   headerContent: {
     flexDirection: 'row',
