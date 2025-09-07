@@ -1,0 +1,711 @@
+/* Enhanced Professional AudioCall Component Styles */
+
+/* Import system fonts for better performance */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+
+/* CSS Variables for consistent theming */
+:root {
+  --call-primary: #3b82f6;
+  --call-success: #10b981;
+  --call-warning: #f59e0b;
+  --call-danger: #ef4444;
+  --call-secondary: #64748b;
+  --call-background: #ffffff;
+  --call-surface: #f8fafc;
+  --call-border: #e2e8f0;
+  --call-text: #1e293b;
+  --call-text-muted: #64748b;
+  --call-shadow: rgba(0, 0, 0, 0.1);
+  --call-shadow-lg: rgba(0, 0, 0, 0.25);
+  --call-radius: 12px;
+  --call-radius-lg: 20px;
+  --call-transition: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --call-background: #0f172a;
+    --call-surface: #1e293b;
+    --call-border: #334155;
+    --call-text: #f1f5f9;
+    --call-text-muted: #94a3b8;
+    --call-shadow: rgba(0, 0, 0, 0.4);
+    --call-shadow-lg: rgba(0, 0, 0, 0.6);
+  }
+}
+
+/* Enhanced pulse animation with better performance */
+@keyframes pulse {
+  0% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(59, 130, 246, 0.1);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+  }
+}
+
+/* Enhanced shimmer animation for loading states */
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+/* Smooth slide animations for modal entrance */
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px) scale(0.95);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+@keyframes slideInDown {
+  from {
+    opacity: 0;
+    transform: translateY(-30px) scale(0.95);
+    filter: blur(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    filter: blur(0);
+  }
+}
+
+/* Fade in animation for elements */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Scale and fade animation for status changes */
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.8) rotate(-5deg);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+/* Button ripple effect with improved performance */
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.6;
+    border-radius: 50%;
+  }
+  100% {
+    transform: scale(4);
+    opacity: 0;
+    border-radius: 50%;
+  }
+}
+
+/* Enhanced phone ring animation */
+@keyframes phoneRing {
+  0%, 100% { 
+    transform: rotate(0deg) scale(1); 
+  }
+  10%, 30%, 50%, 70%, 90% { 
+    transform: rotate(-12deg) scale(1.02); 
+  }
+  20%, 40%, 60%, 80% { 
+    transform: rotate(12deg) scale(1.02); 
+  }
+}
+
+/* Breathing animation for active call indicator */
+@keyframes breathe {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+}
+
+/* Gradient animation for status indicators */
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Wave animation for audio visualization */
+@keyframes wave {
+  0%, 100% {
+    transform: scaleY(1);
+  }
+  50% {
+    transform: scaleY(1.5);
+  }
+}
+
+/* Bounce animation for incoming call */
+@keyframes bounce {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  40%, 43% {
+    transform: translate3d(0, -8px, 0);
+  }
+  70% {
+    transform: translate3d(0, -4px, 0);
+  }
+  90% {
+    transform: translate3d(0, -2px, 0);
+  }
+}
+
+/* Glow effect for active elements */
+@keyframes glow {
+  0%, 100% {
+    box-shadow: 0 0 5px rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(59, 130, 246, 0.8);
+  }
+}
+
+/* Connecting dots animation */
+@keyframes connectingDot {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
+/* Modal backdrop blur animation */
+@keyframes backdropBlur {
+  from {
+    backdrop-filter: blur(0px);
+    opacity: 0;
+  }
+  to {
+    backdrop-filter: blur(20px);
+    opacity: 1;
+  }
+}
+
+/* Typing indicator animation */
+@keyframes typing {
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
+}
+
+/* Float animation for minimized panel */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+/* Main modal animations */
+.audio-call-modal {
+  animation: slideInUp 0.4s var(--call-transition);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+.audio-call-minimized {
+  animation: slideInDown 0.3s var(--call-transition), float 4s ease-in-out infinite;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+}
+
+/* Enhanced button styles */
+.professional-call-button {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s var(--call-transition);
+  font-family: 'Inter', sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  will-change: transform;
+  isolation: isolate;
+}
+
+.professional-call-button::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.3);
+  transition: all 0.4s ease;
+  transform: translate(-50%, -50%);
+  z-index: 0;
+}
+
+.professional-call-button:active::before {
+  width: 300px;
+  height: 300px;
+  animation: ripple 0.6s ease-out;
+}
+
+.professional-call-button:hover {
+  transform: translateY(-2px) scale(1.02);
+}
+
+.professional-call-button:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* Enhanced minimize button styles for better visibility */
+.minimize-button {
+  background: linear-gradient(135deg, rgba(100, 116, 139, 0.15) 0%, rgba(100, 116, 139, 0.08) 100%) !important;
+  border: 1px solid rgba(100, 116, 139, 0.2) !important;
+  box-shadow: 0 4px 12px rgba(100, 116, 139, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
+}
+
+.minimize-button:hover {
+  background: linear-gradient(135deg, rgba(100, 116, 139, 0.25) 0%, rgba(100, 116, 139, 0.15) 100%) !important;
+  transform: translateY(-1px) scale(1.05) !important;
+  box-shadow: 0 6px 16px rgba(100, 116, 139, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+
+/* Status indicator animations */
+.call-status-dot {
+  animation: pulse 2s infinite, glow 3s ease-in-out infinite;
+}
+
+.call-status-connecting {
+  animation: breathe 2s ease-in-out infinite;
+}
+
+.call-status-ringing {
+  animation: phoneRing 0.8s ease-in-out infinite, pulse 2s infinite;
+}
+
+/* Connecting dots with staggered animation */
+.connecting-dots {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.connecting-dots > div {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: var(--call-primary);
+  animation: connectingDot 1.4s infinite ease-in-out both;
+}
+
+.connecting-dots > div:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.connecting-dots > div:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.connecting-dots > div:nth-child(3) {
+  animation-delay: 0s;
+}
+
+/* Audio wave visualization */
+.audio-wave {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 20px;
+}
+
+.audio-wave-bar {
+  width: 3px;
+  background: linear-gradient(to top, var(--call-success), var(--call-primary));
+  border-radius: 2px;
+  animation: wave 1.2s ease-in-out infinite;
+}
+
+.audio-wave-bar:nth-child(1) { animation-delay: 0s; height: 8px; }
+.audio-wave-bar:nth-child(2) { animation-delay: 0.1s; height: 12px; }
+.audio-wave-bar:nth-child(3) { animation-delay: 0.2s; height: 16px; }
+.audio-wave-bar:nth-child(4) { animation-delay: 0.3s; height: 12px; }
+.audio-wave-bar:nth-child(5) { animation-delay: 0.4s; height: 8px; }
+
+/* Enhanced shadows and blur effects */
+.audio-call-shadow {
+  box-shadow: 
+    0 25px 50px var(--call-shadow-lg),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.audio-call-shadow-soft {
+  box-shadow: 
+    0 10px 25px var(--call-shadow),
+    0 0 0 1px var(--call-border);
+}
+
+.audio-call-backdrop {
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  animation: backdropBlur 0.3s ease-out;
+}
+
+/* Call duration counter animation */
+.call-duration {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+  animation: fadeIn 0.5s ease-out;
+}
+
+/* Incoming call bounce animation */
+.incoming-call-avatar {
+  animation: bounce 2s infinite, pulse 2s infinite;
+}
+
+/* Mute indicator styles */
+.mute-indicator {
+  position: relative;
+}
+
+.mute-indicator::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 2px;
+  height: 120%;
+  background: currentColor;
+  transform: translate(-50%, -50%) rotate(45deg);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.mute-indicator.muted::after {
+  opacity: 1;
+  animation: scaleIn 0.3s ease-out;
+}
+
+/* Connection quality indicator */
+.connection-indicator {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 12px;
+}
+
+.connection-bar {
+  width: 3px;
+  background: var(--call-success);
+  border-radius: 1px;
+  transition: all 0.3s ease;
+}
+
+.connection-bar:nth-child(1) { height: 4px; }
+.connection-bar:nth-child(2) { height: 7px; }
+.connection-bar:nth-child(3) { height: 10px; }
+.connection-bar:nth-child(4) { height: 12px; }
+
+.connection-poor .connection-bar {
+  background: var(--call-danger);
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.connection-poor .connection-bar:nth-child(n+3) {
+  opacity: 0.3;
+}
+
+/* Add a subtle warning animation for fair quality */
+.connection-fair .connection-bar {
+  background: var(--call-warning);
+  animation: breathe 3s ease-in-out infinite;
+}
+
+.connection-fair .connection-bar:nth-child(4) {
+  opacity: 0.3;
+}
+
+/* Toast notification styles for call events */
+.call-toast {
+  padding: 16px 20px;
+  border-radius: var(--call-radius);
+  background: var(--call-background);
+  border: 1px solid var(--call-border);
+  box-shadow: var(--call-shadow-lg);
+  animation: slideInDown 0.4s var(--call-transition);
+  font-family: 'Inter', sans-serif;
+  font-weight: 500;
+}
+
+/* Enhanced Mobile Responsive Design */
+@media (max-width: 768px) {
+  .audio-call-modal {
+    margin: 8px !important;
+    width: calc(100% - 16px) !important;
+    max-width: calc(100% - 16px) !important;
+  }
+  
+  .audio-call-minimized {
+    width: 280px !important;
+    right: 8px !important;
+    top: 8px !important;
+  }
+
+  .professional-call-button {
+    padding: 12px 20px !important;
+    font-size: 14px !important;
+    min-width: 100px !important;
+  }
+
+  .minimize-button {
+    min-width: 44px !important;
+    min-height: 44px !important;
+    padding: 10px !important;
+    font-size: 16px !important;
+  }
+
+  .connecting-dots > div {
+    width: 6px;
+    height: 6px;
+  }
+}
+
+@media (max-width: 640px) {
+  .audio-call-modal {
+    margin: 6px !important;
+    width: calc(100% - 12px) !important;
+    max-width: calc(100% - 12px) !important;
+  }
+  
+  .audio-call-minimized {
+    width: 260px !important;
+    right: 6px !important;
+    top: 6px !important;
+  }
+
+  .professional-call-button {
+    padding: 10px 16px !important;
+    font-size: 13px !important;
+    min-width: 80px !important;
+    gap: 8px !important;
+  }
+
+  .minimize-button {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    padding: 8px !important;
+    font-size: 14px !important;
+  }
+}
+
+/* iPhone X and newer iPhone specific styles */
+@media (max-width: 480px) {
+  .audio-call-modal {
+    margin: 4px !important;
+    width: calc(100% - 8px) !important;
+    max-width: calc(100% - 8px) !important;
+    border-radius: 16px !important;
+  }
+  
+  .audio-call-minimized {
+    width: 240px !important;
+    right: 4px !important;
+    top: max(4px, env(safe-area-inset-top, 44px)) !important;
+    border-radius: 16px !important;
+  }
+
+  .professional-call-button {
+    padding: 8px 14px !important;
+    font-size: 12px !important;
+    min-width: 70px !important;
+    gap: 6px !important;
+  }
+
+  .minimize-button {
+    min-width: 36px !important;
+    min-height: 36px !important;
+    padding: 6px !important;
+    font-size: 12px !important;
+    background: linear-gradient(135deg, rgba(100, 116, 139, 0.2) 0%, rgba(100, 116, 139, 0.1) 100%) !important;
+    border: 1px solid rgba(100, 116, 139, 0.3) !important;
+    box-shadow: 0 3px 8px rgba(100, 116, 139, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+  }
+
+  .minimize-button:hover {
+    background: linear-gradient(135deg, rgba(100, 116, 139, 0.3) 0%, rgba(100, 116, 139, 0.2) 100%) !important;
+    transform: translateY(-1px) scale(1.08) !important;
+    box-shadow: 0 4px 12px rgba(100, 116, 139, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  }
+}
+
+/* iPhone X specific safe area handling */
+@media (max-width: 414px) and (min-height: 812px) {
+  .audio-call-modal {
+    margin: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border-radius: 0 !important;
+    top: env(safe-area-inset-top, 44px) !important;
+    height: calc(100vh - env(safe-area-inset-top, 44px) - env(safe-area-inset-bottom, 34px)) !important;
+  }
+  
+  .audio-call-minimized {
+    width: 220px !important;
+    right: 8px !important;
+    top: max(8px, env(safe-area-inset-top, 44px)) !important;
+    border-radius: 12px !important;
+  }
+
+  .minimize-button {
+    min-width: 40px !important;
+    min-height: 40px !important;
+    padding: 8px !important;
+    font-size: 14px !important;
+    background: linear-gradient(135deg, rgba(100, 116, 139, 0.25) 0%, rgba(100, 116, 139, 0.15) 100%) !important;
+    border: 2px solid rgba(100, 116, 139, 0.4) !important;
+    box-shadow: 0 4px 10px rgba(100, 116, 139, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.2) !important;
+  }
+
+  .minimize-button:hover {
+    background: linear-gradient(135deg, rgba(100, 116, 139, 0.35) 0%, rgba(100, 116, 139, 0.25) 100%) !important;
+    transform: translateY(-2px) scale(1.1) !important;
+    box-shadow: 0 6px 14px rgba(100, 116, 139, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.25) !important;
+  }
+}
+
+/* Mobile-specific class styles */
+.mobile-call-modal {
+  border-radius: 16px !important;
+}
+
+.mobile-minimized {
+  border-radius: 16px !important;
+}
+
+.iphonex-call-modal {
+  border-radius: 0 !important;
+  top: env(safe-area-inset-top, 44px) !important;
+}
+
+.iphonex-minimized {
+  border-radius: 12px !important;
+  top: max(8px, env(safe-area-inset-top, 44px)) !important;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .professional-call-button {
+    border: 2px solid currentColor !important;
+  }
+  
+  .minimize-button {
+    border: 2px solid currentColor !important;
+    background: rgba(100, 116, 139, 0.3) !important;
+  }
+  
+  .call-status-dot {
+    border: 2px solid var(--call-background);
+  }
+  
+  .audio-wave-bar {
+    background: currentColor !important;
+  }
+}
+
+/* Reduced motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  
+  .audio-call-minimized {
+    animation: none !important;
+  }
+  
+  .professional-call-button:hover {
+    transform: none !important;
+  }
+}
+
+/* Focus styles for keyboard navigation */
+.professional-call-button:focus-visible {
+  outline: 3px solid var(--call-primary);
+  outline-offset: 2px;
+}
+
+/* Print styles */
+@media print {
+  .audio-call-modal,
+  .audio-call-minimized {
+    display: none !important;
+  }
+}
+
+/* Performance optimizations */
+.audio-call-modal,
+.audio-call-minimized,
+.professional-call-button {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+  transform-style: preserve-3d;
+}
+
+/* GPU acceleration for smooth animations */
+.call-status-dot,
+.connecting-dots > div,
+.audio-wave-bar {
+  will-change: transform;
+  transform: translateZ(0);
+}

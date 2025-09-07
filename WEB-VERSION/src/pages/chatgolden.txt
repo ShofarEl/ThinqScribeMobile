@@ -1,0 +1,1167 @@
+// src/components/StudentChat.jsx
+
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Layout,
+  List,
+  Input,
+  Button,
+  Avatar,
+  Spin,
+  Typography,
+  message as Msg,
+  Popover,
+  Upload,
+} from 'antd';
+import {
+  SendOutlined,
+  UserOutlined,
+  SearchOutlined,
+  CloseOutlined,
+  MessageOutlined,
+  SmileOutlined,
+  UploadOutlined,
+  FilePdfOutlined,
+  PaperClipOutlined,
+  DownloadOutlined,
+} from '@ant-design/icons';
+import { useParams, useNavigate } from 'react-router-dom';
+
+// Import the Web Component. This registers <emoji-picker> in the browser.
+import 'emoji-picker-element';
+
+import {
+  getChatMessages,
+  getChats,
+  sendChatMessage,
+  sendChatFile,
+} from '../api/chat';
+import { useAuth } from '../context/AuthContext';
+import { useNotifications } from '../context/NotificationContext';
+import HeaderNoNotif from '../components/ChatHeader';
+
+const { Sider, Content } = Layout;
+const { Title, Text } = Typography;
+
+const StudentChat = () => {
+  const { chatId: routeChatId } = useParams();
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const { socket } = useNotifications();
+
+  // ── Chat/List state ─────────────────────────────────────────────────────────
+  const [chats, setChats] = useState([]);
+  const [selectedChat, setSelectedChat] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [sending, setSending] = useState(false);
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
+
+  // ── New-message + Reply state ───────────────────────────────────────────────
+  const [newMessage, setNewMessage] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null);
+
+  // ── File-to-send state ──────────────────────────────────────────────────────
+  const [fileToSend, setFileToSend] = useState(null);
+  const [uploadList, setUploadList] = useState([]);
+
+  // ── Search state ────────────────────────────────────────────────────────────
+  const [searchTerm, setSearchTerm] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [highlightedMsgId, setHighlightedMsgId] = useState(null);
+
+  // ── Emoji picker visibility and ref ─────────────────────────────────────────
+  const [emojiVisible, setEmojiVisible] = useState(false);
+  const emojiPickerRef = useRef(null);
+
+  // ── Typing indicator state ──────────────────────────────────────────────────
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
+
+  const messagesEndRef = useRef(null);
+  const typingTimeout = useRef(null);
+
+  // ── 1) On mount, re-join "user-<id>" room ─────────────────────────────────
+  useEffect(() => {
+    if (user && socket) {
+      socket.emit('joinUserRoom', user._id);
+    }
+  }, [user, socket]);
+
+  // ── 2) Track window width for responsive sidebar ───────────────────────────
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // ── 3) Listen for real-time incoming messages ──────────────────────────────
+  useEffect(() => {
+    if (!socket || !user) return;
+
+    const handleReceiveMessage = (data) => {
+      if (selectedChat && data.chatId === selectedChat._id) {
+        setChatMessages((prev) => {
+          if (prev.some((msg) => msg._id === data.message._id)) {
+            return prev;
+          }
+          return [...prev, data.message];
+        });
+      }
+      setChats((prevChats) => {
+        const updated = prevChats.map((chat) => {
+          if (chat._id === data.chatId) {
+            const already = (chat.messages || []).some(
+              (msg) => msg._id === data.message._id
+            );
+            if (!already) {
+              return {
+                ...chat,
+                messages: [...(chat.messages || []), data.message],
+                updatedAt: new Date(),
+              };
+            }
+          }
+          return chat;
+        });
+        const chatToMove = updated.find((c) => c._id === data.chatId);
+        if (chatToMove) {
+          return [chatToMove, ...updated.filter((c) => c._id !== data.chatId)];
+        }
+        return updated;
+      });
+    };
+
+    const handleMessageError = (data) => {
+      Msg.error(data.error || 'Failed to send message');
+      setSending(false);
+    };
+
+    const handleTyping = ({ userId }) => {
+      if (selectedChat && selectedChat._id) {
+        setOtherUserTyping(true);
+      }
+    };
+    const handleStopTyping = ({ userId }) => {
+      if (selectedChat && selectedChat._id) {
+        setOtherUserTyping(false);
+      }
+    };
+
+    socket.on('messageBroadcast', handleReceiveMessage);
+    socket.on('messageError', handleMessageError);
+    socket.on('typing', handleTyping);
+    socket.on('stopTyping', handleStopTyping);
+
+    return () => {
+      socket.off('messageBroadcast', handleReceiveMessage);
+      socket.off('messageError', handleMessageError);
+      socket.off('typing', handleTyping);
+      socket.off('stopTyping', handleStopTyping);
+    };
+  }, [socket, user, selectedChat]);
+
+  // ── 4) Fetch chat list (and pre-select from route) ─────────────────────────
+  useEffect(() => {
+    const fetchChats = async () => {
+      setLoadingMessages(true);
+      try {
+        const data = await getChats();
+        setChats(data || []);
+        if (routeChatId) {
+          const found = data.find((c) => c._id === routeChatId);
+          if (found) setSelectedChat(found);
+        }
+      } catch (err) {
+        console.error('Failed to load chats:', err);
+        Msg.error('Failed to load chats');
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+    if (user) {
+      fetchChats();
+      socket?.emit('joinUserRoom', user._id);
+    }
+  }, [routeChatId, user, socket]);
+
+  // ── 5) Whenever selectedChat changes ▶︎ fetch its messages & join its room ─
+  useEffect(() => {
+    if (!selectedChat || !user || !socket) {
+      setChatMessages([]);
+      return;
+    }
+    const fetchMessages = async () => {
+      setLoadingMessages(true);
+      try {
+        const msgs = await getChatMessages(selectedChat._id);
+        setChatMessages(msgs || []);
+        socket.emit('joinChat', selectedChat._id);
+        socket.emit('markMessagesAsRead', {
+          chatId: selectedChat._id,
+          userId: user._id,
+        });
+      } catch (err) {
+        console.error('Failed to load messages:', err);
+        Msg.error('Failed to load messages');
+      } finally {
+        setLoadingMessages(false);
+      }
+    };
+    fetchMessages();
+    return () => {
+      socket.emit('leaveChat', selectedChat._id);
+    };
+  }, [selectedChat, user, socket]);
+
+  // ── 6) Scroll to bottom whenever chatMessages changes ─────────────────────
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [chatMessages]);
+
+  const scrollToBottom = () => {
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
+  // ── 7) Handle selecting a chat in the sidebar ─────────────────────────────
+  const handleSelectChat = (chat) => {
+    setSelectedChat(chat);
+    setOtherUserTyping(false);
+    if (!isDesktop) {
+      navigate(`/chat/student/${chat._id}`);
+    }
+  };
+
+const handleSend = async () => {
+  if (!selectedChat || sending) return;
+  
+  setSending(true);
+  
+  try {
+    // Handle file upload first if there's a file
+    if (fileToSend) {
+      await sendChatFile({ chatId: selectedChat._id, file: fileToSend });
+      setFileToSend(null);
+      setUploadList([]);
+    }
+    
+    // Handle text message
+    const content = newMessage.trim();
+    if (content) {
+      // Send the message and wait for response
+      const sentMessage = await sendChatMessage({
+        chatId: selectedChat._id,
+        content,
+        replyTo: replyingTo?._id
+      });
+      
+      // Clear input immediately after successful send
+      setNewMessage('');
+      setReplyingTo(null);
+      
+      // Stop typing indicator
+      socket.emit('stopTyping', {
+        chatId: selectedChat._id,
+        userId: user._id
+      });
+      
+      // Optimistically add the message to local state if not already added by socket
+      if (sentMessage) {
+        setChatMessages(prev => {
+          // Check if message already exists (from socket)
+          const exists = prev.some(msg => msg._id === sentMessage._id);
+          if (!exists) {
+            return [...prev, sentMessage];
+          }
+          return prev;
+        });
+        
+        // Update the chat list with the new message
+        setChats(prevChats => {
+          const updated = prevChats.map(chat => {
+            if (chat._id === selectedChat._id) {
+              const messageExists = (chat.messages || []).some(
+                msg => msg._id === sentMessage._id
+              );
+              if (!messageExists) {
+                return {
+                  ...chat,
+                  messages: [...(chat.messages || []), sentMessage],
+                  updatedAt: new Date()
+                };
+              }
+            }
+            return chat;
+          });
+          
+          // Move the updated chat to the top
+          const chatToMove = updated.find(c => c._id === selectedChat._id);
+          if (chatToMove) {
+            return [chatToMove, ...updated.filter(c => c._id !== selectedChat._id)];
+          }
+          return updated;
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Send failed:', error);
+    Msg.error('Failed to send message');
+  } finally {
+    setSending(false);
+  }
+};
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const formatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    if (diff < 24 * 60 * 60 * 1000) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
+
+  // ── 9) Handle “Reply” clicks ─────────────────────────────────────────────
+  const handleReply = (msg) => {
+    setReplyingTo(msg);
+  };
+  const cancelReply = () => {
+    setReplyingTo(null);
+  };
+
+  // ── 10) Search logic ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!searchTerm) {
+      setSearchResults([]);
+      return;
+    }
+    const term = searchTerm.toLowerCase();
+    const results = chatMessages.filter((msg) =>
+      msg.content.toLowerCase().includes(term)
+    );
+    setSearchResults(results);
+  }, [searchTerm, chatMessages]);
+
+  const scrollToMessage = (msgId) => {
+    const el = document.getElementById(`msg-${msgId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMsgId(msgId);
+      setTimeout(() => setHighlightedMsgId(null), 1500);
+    }
+  };
+
+  // ── 11) Typing indicator: user is typing ──────────────────────────────────
+  const handleTyping = () => {
+    if (!selectedChat) return;
+    socket.emit('typing', {
+      chatId: selectedChat._id,
+      userId: user._id,
+      userName: user.name,
+    });
+    if (typingTimeout.current) {
+      clearTimeout(typingTimeout.current);
+    }
+    typingTimeout.current = setTimeout(() => {
+      socket.emit('stopTyping', {
+        chatId: selectedChat._id,
+        userId: user._id,
+      });
+    }, 1500);
+  };
+
+  // ── 12) Set up / tear down the emoji-picker-element event listener ─────────
+  useEffect(() => {
+    const pickerEl = emojiPickerRef.current;
+    if (!pickerEl) return;
+
+    const onEmojiClick = (event) => {
+      const unicode = event.detail.unicode;
+      if (unicode) {
+        setNewMessage((prev) => prev + unicode);
+      }
+    };
+
+    if (emojiVisible) {
+      pickerEl.addEventListener('emoji-click', onEmojiClick);
+    } else {
+      pickerEl.removeEventListener('emoji-click', onEmojiClick);
+    }
+
+    return () => {
+      pickerEl.removeEventListener('emoji-click', onEmojiClick);
+    };
+  }, [emojiVisible]);
+
+  // ── Download helper for cross-origin S3 links ─────────────────────────────
+  const downloadFile = async (url) => {
+    try {
+      const response = await fetch(url, { mode: 'cors' });
+      const blob = await response.blob();
+      const filename = url.split('/').pop().split('?')[0];
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error('Download failed:', err);
+      Msg.error('Download failed');
+    }
+  };
+
+  // ── Sidebar: render list of chats ─────────────────────────────────────────
+  const renderChatList = () => (
+    <List
+      itemLayout="horizontal"
+      dataSource={chats}
+      loading={loadingMessages}
+      locale={{ emptyText: <Text>No chats found</Text> }}
+      renderItem={(chat) => {
+        const other = chat.participants?.find((p) => p._id !== user._id) || {};
+        const lastMsg =
+          chat.messages && chat.messages.length > 0
+            ? chat.messages[chat.messages.length - 1]
+            : null;
+        const hasUnread = chat.messages?.some(
+          (msg) =>
+            msg.sender._id.toString() !== user._id.toString() && !msg.read
+        );
+
+        return (
+          <List.Item
+            onClick={() => handleSelectChat(chat)}
+            style={{
+              cursor: 'pointer',
+              padding: '12px',
+              background:
+                selectedChat && selectedChat._id === chat._id
+                  ? '#e6f7ff'
+                  : 'transparent',
+              borderRadius: '4px',
+              marginBottom: '8px',
+              borderLeft: hasUnread ? '4px solid #1890ff' : 'none',
+            }}
+          >
+            <List.Item.Meta
+              avatar={
+                <Avatar
+                  src={
+                    other.avatar ||
+                    `https://api.dicebear.com/7.x/initials/svg?seed=${other.name}`
+                  }
+                  icon={<UserOutlined />}
+                  style={{
+                    backgroundColor:
+                      other.role === 'student' ? '#1890ff' : '#52c41a',
+                  }}
+                />
+              }
+              title={
+                <div
+                  style={{ display: 'flex', justifyContent: 'space-between' }}
+                >
+                  <span style={{ fontWeight: hasUnread ? 'bold' : 'normal' }}>
+                    {other.name || 'Unknown'}
+                  </span>
+                  {other.role && (
+                    <span
+                      style={{
+                        fontSize: '10px',
+                        color:
+                          other.role === 'student' ? '#1890ff' : '#52c41a',
+                        textTransform: 'uppercase',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {other.role}
+                    </span>
+                  )}
+                </div>
+              }
+              description={
+                <div>
+                  {lastMsg && (
+                    <Typography.Text type="secondary" ellipsis={{ rows: 1 }}>
+                      {lastMsg.content}
+                    </Typography.Text>
+                  )}
+                  {lastMsg && (
+                    <div
+                      style={{
+                        fontSize: '10px',
+                        color: '#999',
+                        marginTop: '4px',
+                      }}
+                    >
+                      {formatTime(lastMsg.timestamp)}
+                    </div>
+                  )}
+                </div>
+              }
+            />
+          </List.Item>
+        );
+      }}
+    />
+  );
+
+  // ── Main UI ────────────────────────────────────────────────────────────────
+  return (
+    <>
+      <HeaderNoNotif />
+      <Layout style={{ height: 'calc(100vh - 64px)' }}>
+        {isDesktop && (
+          <Sider
+            width={300}
+            style={{
+              background: '#fff',
+              borderRight: '1px solid #f0f0f0',
+              overflowY: 'auto',
+              padding: '16px',
+            }}
+          >
+            <Title level={4} style={{ marginBottom: '16px' }}>
+              Chats
+            </Title>
+            {renderChatList()}
+          </Sider>
+        )}
+
+        <Content
+          style={{
+            padding: '0',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+          }}
+        >
+          {selectedChat ? (
+            <>
+              {/* Chat Header */}
+              <div
+                style={{
+                  background: '#fff',
+                  padding: '12px 16px',
+                  borderBottom: '1px solid #f0f0f0',
+                  position: 'sticky',
+                  top: 0,
+                  zIndex: 2,
+                }}
+              >
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: '12px' }}
+                >
+                  <Avatar
+                    size="large"
+                    src={
+                      selectedChat.participants.find((p) => p._id !== user._id)
+                        .avatar ||
+                      `https://api.dicebear.com/7.x/initials/svg?seed=${
+                        selectedChat.participants.find((p) => p._id !== user._id)
+                          .name
+                      }`
+                    }
+                    icon={<UserOutlined />}
+                    style={{
+                      backgroundColor:
+                        selectedChat.participants.find((p) => p._id !== user._id)
+                          .role === 'student'
+                          ? '#1890ff'
+                          : '#52c41a',
+                    }}
+                  />
+                  <Title level={5} style={{ margin: 0 }}>
+                    Chat with{' '}
+                    {
+                      selectedChat.participants.find((p) => p._id !== user._id)
+                        .name
+                    }
+                  </Title>
+                </div>
+                {otherUserTyping && (
+                  <Text type="secondary" style={{ marginLeft: 56, fontSize: 12 }}>
+                    {
+                      selectedChat.participants.find((p) => p._id !== user._id)
+                        .name
+                    }{' '}
+                    is typing…
+                  </Text>
+                )}
+              </div>
+
+              {/* Search Bar */}
+              <div
+                style={{
+                  background: '#fff',
+                  borderBottom: '1px solid #f0f0f0',
+                  padding: '8px 16px',
+                  position: 'sticky',
+                  top: otherUserTyping ? 96 : 64,
+                  zIndex: 1,
+                }}
+              >
+                <Input
+                  prefix={<SearchOutlined />}
+                  placeholder="Search messages..."
+                  allowClear
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ borderRadius: 20, maxWidth: 300 }}
+                />
+                {searchResults.length > 0 && (
+                  <div
+                    style={{
+                      background: 'white',
+                      border: '1px solid #eee',
+                      borderRadius: 10,
+                      maxHeight: 160,
+                      overflow: 'auto',
+                      position: 'absolute',
+                      zIndex: 10,
+                      width: 300,
+                      marginTop: 40,
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                    }}
+                  >
+                    {searchResults.map((result) => (
+                      <div
+                        key={result._id}
+                        style={{
+                          padding: '8px 12px',
+                          cursor: 'pointer',
+                          background:
+                            highlightedMsgId === result._id ? '#eaf7ff' : 'white',
+                        }}
+                        onClick={() => scrollToMessage(result._id)}
+                      >
+                        <b>{result.sender.name}:</b>{' '}
+                        <span>
+                          {result.content.length > 60
+                            ? result.content.slice(0, 60) + '…'
+                            : result.content}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Messages Area */}
+              <div
+                style={{
+                  flex: 1,
+                  overflowY: 'auto',
+                  background: '#fafafa',
+                  padding: '16px',
+                }}
+              >
+                {loadingMessages ? (
+                  <Spin className="w-full text-center" />
+                ) : (
+                  <List
+                    itemLayout="vertical"
+                    dataSource={chatMessages}
+                    renderItem={(msg) => {
+                      const isCurrentUser = msg.sender._id === user._id;
+                      const isReply = !!msg.replyTo;
+                      const repliedMsg = isReply ? msg.replyTo : null;
+
+                      return (
+                        <List.Item
+                          key={msg._id}
+                          id={`msg-${msg._id}`}
+                          style={{
+                            textAlign: isCurrentUser ? 'right' : 'left',
+                            display: 'flex',
+                            justifyContent: isCurrentUser
+                              ? 'flex-end'
+                              : 'flex-start',
+                            marginBottom: 8,
+                            background:
+                              highlightedMsgId === msg._id
+                                ? '#fff8e1'
+                                : 'transparent',
+                            borderRadius: '12px',
+                            padding: '4px',
+                          }}
+                        >
+                          <div
+                            style={{
+                              display: 'flex',
+                              flexDirection: isCurrentUser
+                                ? 'row-reverse'
+                                : 'row',
+                              alignItems: 'flex-start',
+                              maxWidth: '75%',
+                              gap: '8px',
+                              position: 'relative',
+                            }}
+                          >
+                            <Avatar
+                              size="small"
+                              src={
+                                msg.sender.avatar ||
+                                `https://api.dicebear.com/7.x/initials/svg?seed=${msg.sender.name}`
+                              }
+                              icon={<UserOutlined />}
+                              style={{ flexShrink: 0 }}
+                            />
+
+                            <div
+                              style={{
+                                background: isCurrentUser ? '#1890ff' : '#f0f0f0',
+                                color: isCurrentUser ? 'white' : 'black',
+                                padding: '10px 14px',
+                                borderRadius: '18px',
+                                boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                                wordBreak: 'break-word',
+                                position: 'relative',
+                              }}
+                            >
+                              {/* Quoted reply */}
+                              {repliedMsg && (
+                                <div
+                                  style={{
+                                    fontSize: '12px',
+                                    color: isCurrentUser ? '#cbe8fd' : '#555',
+                                    borderLeft: `3px solid ${
+                                      isCurrentUser ? '#cbe8fd' : '#1890ff'
+                                    }`,
+                                    paddingLeft: '8px',
+                                    marginBottom: 6,
+                                    background: isCurrentUser
+                                      ? 'rgba(255,255,255,0.07)'
+                                      : '#eaf7ff',
+                                    borderRadius: '6px',
+                                  }}
+                                >
+                                  <b>{repliedMsg.sender.name}:</b>{' '}
+                                  {repliedMsg.content.length > 60
+                                    ? repliedMsg.content.slice(0, 60) + '…'
+                                    : repliedMsg.content}
+                                </div>
+                              )}
+
+                              {/* 🔧 Conditional rendering for file/image/PDF + view & download */}
+                              {(() => {
+                                if (
+                                  typeof msg.content === 'string' &&
+                                  (msg.content.startsWith('http://') ||
+                                    msg.content.startsWith('https://'))
+                                ) {
+                                  const url = msg.content;
+                                  // Strip any query params for extension check
+                                  const lower = url.split('?')[0].toLowerCase();
+                                  if (
+                                    lower.endsWith('.jpg') ||
+                                    lower.endsWith('.jpeg') ||
+                                    lower.endsWith('.png') ||
+                                    lower.endsWith('.gif')
+                                  ) {
+                                    // Image preview + clickable to view full
+                                    return (
+                                      <div style={{ display: 'inline-block' }}>
+                                        <a
+                                          href={url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                        >
+                                          <img
+                                            src={url}
+                                            alt="attachment"
+                                            style={{
+                                              maxWidth: '200px',
+                                              borderRadius: 8,
+                                              display: 'block',
+                                            }}
+                                          />
+                                        </a>
+                                        <Button
+                                          type="text"
+                                          icon={<DownloadOutlined />}
+                                          style={{
+                                            marginTop: 4,
+                                            color: isCurrentUser
+                                              ? '#cce4ff'
+                                              : '#1890ff',
+                                          }}
+                                          onClick={() => downloadFile(url)}
+                                        >
+                                          Download
+                                        </Button>
+                                      </div>
+                                    );
+                                  } else if (lower.endsWith('.pdf')) {
+                                    // PDF link + inline download
+                                    return (
+                                      <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                        <FilePdfOutlined
+                                          style={{
+                                            fontSize: 24,
+                                            color: isCurrentUser
+                                              ? '#cce4ff'
+                                              : '#1890ff',
+                                          }}
+                                        />
+                                        <a
+                                          href={url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          style={{
+                                            marginLeft: 8,
+                                            color: isCurrentUser
+                                              ? '#cce4ff'
+                                              : '#1890ff',
+                                          }}
+                                        >
+                                          View PDF
+                                        </a>
+                                        <Button
+                                          type="text"
+                                          icon={<DownloadOutlined />}
+                                          style={{
+                                            marginLeft: 16,
+                                            color: isCurrentUser
+                                              ? '#cce4ff'
+                                              : '#1890ff',
+                                          }}
+                                          onClick={() => downloadFile(url)}
+                                        />
+                                      </div>
+                                    );
+                                  } else {
+                                    // Generic file link + download
+                                    return (
+                                      <div style={{ display: 'inline-flex', alignItems: 'center' }}>
+                                        <PaperClipOutlined
+                                          style={{
+                                            fontSize: 20,
+                                            color: isCurrentUser
+                                              ? '#cce4ff'
+                                              : '#1890ff',
+                                          }}
+                                        />
+                                        <a
+                                          href={url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          style={{
+                                            marginLeft: 8,
+                                            color: isCurrentUser
+                                              ? '#cce4ff'
+                                              : '#1890ff',
+                                          }}
+                                        >
+                                          View File
+                                        </a>
+                                        <Button
+                                          type="text"
+                                          icon={<DownloadOutlined />}
+                                          style={{
+                                            marginLeft: 16,
+                                            color: isCurrentUser
+                                              ? '#cce4ff'
+                                              : '#1890ff',
+                                          }}
+                                          onClick={() => downloadFile(url)}
+                                        />
+                                      </div>
+                                    );
+                                  }
+                                }
+                                // Otherwise, plain text
+                                return (
+                                  <Typography.Text
+                                    style={{
+                                      color: isCurrentUser ? 'white' : 'black',
+                                      display: 'block',
+                                    }}
+                                  >
+                                    {msg.content}
+                                  </Typography.Text>
+                                );
+                              })()}
+
+                              <div
+                                style={{
+                                  fontSize: '10px',
+                                  color: isCurrentUser ? '#ccc' : '#666',
+                                  marginTop: '4px',
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                }}
+                              >
+                                <span>
+                                  {formatTime(msg.timestamp)}{' '}
+                                  {isCurrentUser && msg.read && '✓ Read'}
+                                </span>
+                                <Button
+                                  icon={<MessageOutlined />}
+                                  size="small"
+                                  type="text"
+                                  onClick={() => handleReply(msg)}
+                                  style={{
+                                    color: isCurrentUser ? '#cce4ff' : '#1890ff',
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        </List.Item>
+                      );
+                    }}
+                  />
+                )}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Reply Banner */}
+              {replyingTo && (
+                <div
+                  style={{
+                    background: '#eaf7ff',
+                    padding: '8px 12px',
+                    borderLeft: '3px solid #1890ff',
+                    borderRadius: 10,
+                    margin: '8px 16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                  }}
+                >
+                  <div style={{ flex: 1, fontSize: 13 }}>
+                    Replying to <b>{replyingTo.sender.name}</b>:{' '}
+                    {replyingTo.content.length > 64
+                      ? replyingTo.content.slice(0, 64) + '…'
+                      : replyingTo.content}
+                  </div>
+                  <Button
+                    icon={<CloseOutlined />}
+                    size="small"
+                    onClick={cancelReply}
+                    type="text"
+                  />
+                </div>
+              )}
+
+              {/* Input + Emoji + File Upload Area 🔧 */}
+              <div
+                style={{
+                  padding: '12px 16px',
+                  background: '#fff',
+                  borderTop: '1px solid #f0f0f0',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                }}
+              >
+                {/* Emoji picker popover */}
+                <Popover
+                  content={
+                    <div
+                      style={{
+                        background: '#ffffff',
+                        borderRadius: 12,
+                        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.12)',
+                        width: 360,
+                        height: 440,
+                        padding: '8px',
+                        overflow: 'hidden',
+                        display: 'flex',
+                        flexDirection: 'column',
+                      }}
+                    >
+                      {/* Header */}
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <Text strong style={{ fontSize: 16 }}>
+                          Emoji
+                        </Text>
+                        <Button
+                          icon={<CloseOutlined />}
+                          size="small"
+                          type="text"
+                          onClick={() => setEmojiVisible(false)}
+                        />
+                      </div>
+
+                      {/* The <emoji-picker> Web Component */}
+                      <div
+                        style={{
+                          flex: 1,
+                          borderRadius: '8px',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <emoji-picker
+                          ref={emojiPickerRef}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            '--picker-background': '#fafafa',
+                            '--categories-background': '#ffffff',
+                            '--emoji-size': '30px',
+                            '--emoji-padding': '8px',
+                            '--category-button-background-hover': 'rgba(24,144,255,0.15)',
+                            '--category-button-background-active': 'rgba(24,144,255,0.2)',
+                            '--category-button-border-radius': '6px',
+                            '--category-button-size': '36px',
+                            '--header-background': '#ffffff',
+                            '--header-border-color': '#ddd',
+                          }}
+                        ></emoji-picker>
+                      </div>
+                    </div>
+                  }
+                  trigger="click"
+                  visible={emojiVisible}
+                  onVisibleChange={(vis) => setEmojiVisible(vis)}
+                  placement="topLeft"
+                  overlayStyle={{ borderRadius: 12, overflow: 'hidden' }}
+                >
+                  <Button
+                    icon={<SmileOutlined style={{ fontSize: 20, color: '#555' }} />}
+                    type="text"
+                  />
+                </Popover>
+
+                {/* Text input */}
+                <Input.TextArea
+                  value={newMessage}
+                  onChange={(e) => {
+                    setNewMessage(e.target.value);
+                    handleTyping();
+                  }}
+                  onKeyDown={handleKeyPress}
+                  placeholder="Type a message"
+                  autoSize={{ minRows: 1, maxRows: 4 }}
+                  style={{
+                    borderRadius: '20px',
+                    padding: '10px 14px',
+                    flex: 1,
+                  }}
+                />
+
+                {/* Upload button (select file without auto-upload) 🔧 */}
+                <Upload
+                  accept="image/*,application/pdf"
+                  fileList={uploadList}
+                  beforeUpload={(file) => {
+                    setFileToSend(file);
+                    setUploadList([file]);
+                    return false; // Prevent auto-upload
+                  }}
+                  onRemove={() => {
+                    setFileToSend(null);
+                    setUploadList([]);
+                  }}
+                  showUploadList={{ showRemoveIcon: true }}
+                >
+                  <Button type="text" icon={<UploadOutlined />} />
+                </Upload>
+
+                {/* Send button (uploads file first, then text) */}
+                <Button
+                  type="primary"
+                  shape="circle"
+                  icon={<SendOutlined />}
+                  onClick={handleSend}
+                  loading={sending}
+                />
+              </div>
+            </>
+          ) : (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#888',
+              }}
+            >
+              <Text>Select a chat to start messaging</Text>
+            </div>
+          )}
+        </Content>
+      </Layout>
+    </>
+  );
+};
+
+export default StudentChat;
+
+
+
+
+
+
+import client from './client';
+
+export const startChat = async (participantId) => {
+  try {
+    const response = await client.post('/chat', { participantId });
+    return response; // This should return the populated chat object
+  } catch (error) {
+    console.error('Error starting chat:', error);
+    throw error;
+  }
+};
+
+export const getChatMessages = async (chatId) => {
+  try {
+    const response = await client.get(`/chat/${chatId}/messages`);
+    return response; // This should return the messages array
+  } catch (error) {
+    console.error('Error fetching messages:', error);
+    throw error;
+  }
+};
+
+export const sendChatMessage = async (messageData) => {
+  try {
+    // Updated to use the correct endpoint
+    const response = await client.post('/chat/send', messageData);
+    return response; // This should return the sent message
+  } catch (error) {
+    console.error('Error sending message:', error);
+    throw error;
+  }
+};
+
+export const getChats = async () => {
+  try {
+    const response = await client.get('/chat');
+    return response; // This should return the chats array
+  } catch (error) {
+    console.error('Error fetching chats:', error);
+    throw error;
+  }
+};
+export const sendChatFile = async ({ chatId, file }) => {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('chatId', chatId);
+  const res = await client.post('/chat/send-file', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data; // payload = { ... message fields ... }
+};

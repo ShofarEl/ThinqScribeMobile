@@ -1,0 +1,172 @@
+/* WriterProfile.css */
+
+.writer-profile-card {
+    transition: all 0.3s ease;
+  }
+  
+  .writer-profile-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.12) !important;
+  }
+  
+  .writer-profile-card .ant-card-head {
+    border-bottom: none;
+    padding: 24px 24px 0 24px;
+  }
+  
+  .writer-profile-card .ant-card-body {
+    padding: 24px;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 992px) {
+    .writer-profile-card {
+      position: static !important;
+      top: auto !important;
+      margin-bottom: 24px;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .writer-profile-card {
+      position: static !important;
+      top: auto !important;
+      margin-bottom: 20px;
+      border-radius: 12px !important;
+    }
+    
+    .writer-profile-content {
+      padding: 16px 12px;
+    }
+  
+    .writer-profile-card .ant-card-body {
+      padding: 16px !important;
+    }
+  
+    .writer-profile-card .ant-card-head {
+      padding: 16px 16px 0 16px !important;
+    }
+  
+    /* Mobile-specific styles */
+    .ant-row {
+      margin-left: -8px !important;
+      margin-right: -8px !important;
+    }
+  
+    .ant-col {
+      padding-left: 8px !important;
+      padding-right: 8px !important;
+    }
+  
+    /* Adjust card titles for mobile */
+    .ant-card-head-title {
+      font-size: 16px !important;
+    }
+  
+    /* Better spacing for mobile tags */
+    .ant-tag {
+      margin-bottom: 6px !important;
+      font-size: 12px !important;
+      padding: 4px 8px !important;
+    }
+  
+    /* Mobile button adjustments */
+    .ant-btn-lg {
+      height: 48px !important;
+      font-size: 15px !important;
+      border-radius: 10px !important;
+    }
+  }
+  
+  @media (max-width: 480px) {
+    .writer-profile-content {
+      padding: 12px 8px;
+    }
+  
+    .writer-profile-card .ant-card-body {
+      padding: 12px !important;
+    }
+  
+    .writer-profile-card .ant-card-head {
+      padding: 12px 12px 0 12px !important;
+    }
+  
+    /* Even smaller spacing for very small screens */
+    .ant-row {
+      margin-left: -6px !important;
+      margin-right: -6px !important;
+    }
+  
+    .ant-col {
+      padding-left: 6px !important;
+      padding-right: 6px !important;
+    }
+  
+    /* Compact avatar for very small screens */
+    .ant-avatar {
+      width: 80px !important;
+      height: 80px !important;
+    }
+  
+    /* Smaller text for tiny screens */
+    .ant-typography h2 {
+      font-size: 18px !important;
+    }
+  
+    .ant-tag {
+      font-size: 11px !important;
+      padding: 3px 6px !important;
+    }
+  }
+  
+  /* Custom animations */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(30px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+  
+  .writer-profile-card,
+  .writer-details-card {
+    animation: fadeInUp 0.6s ease-out;
+  }
+  
+  /* Tag hover effects */
+  .ant-tag {
+    transition: all 0.2s ease;
+  }
+  
+  .ant-tag:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+  
+  /* Button loading state */
+  .ant-btn-loading {
+    pointer-events: none;
+  }
+  
+  /* Custom scrollbar for long content */
+  .writer-profile-content::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  .writer-profile-content::-webkit-scrollbar-track {
+    background: #f1f5f9;
+    border-radius: 3px;
+  }
+  
+  .writer-profile-content::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+  
+  .writer-profile-content::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+  

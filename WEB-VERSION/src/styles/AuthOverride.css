@@ -1,0 +1,137 @@
+/* Auth Override Styles - Fix for overlay issues */
+
+:root {
+  --primary-dark: #015382;
+  --primary: #017DB0;
+  --primary-light: #0191CE;
+  --white: #ffffff;
+  --off-white: #f8f9fa;
+  --light-grey: #e9ecef;
+  --mid-grey: #ced4da;
+  --dark-grey: #6c757d;
+  --text-dark: #212529;
+}
+
+/* Override problematic background and overlay */
+.modern-auth-container {
+  background: var(--off-white) !important;
+  background-image: none !important;
+}
+
+/* Remove animated background elements */
+.auth-background {
+  display: none !important;
+}
+
+.floating-element {
+  display: none !important;
+}
+
+/* Update card styling */
+.modern-auth-card {
+  background: var(--white) !important;
+  backdrop-filter: none !important;
+  border: 1px solid var(--light-grey) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05) !important;
+}
+
+.modern-auth-card::before {
+  background: var(--primary) !important;
+  animation: none !important;
+}
+
+/* Update branding colors */
+.brand-title {
+  color: var(--primary-dark) !important;
+  background: none !important;
+  -webkit-text-fill-color: var(--primary-dark) !important;
+}
+
+.logo-icon {
+  background: var(--primary) !important;
+}
+
+/* Update button styling */
+.modern-auth-button {
+  background-color: var(--primary) !important;
+  border-color: var(--primary) !important;
+}
+
+.modern-auth-button:hover {
+  background-color: var(--primary-dark) !important;
+  border-color: var(--primary-dark) !important;
+}
+
+/* Form input styling */
+.modern-auth-input {
+  border: 1px solid var(--mid-grey) !important;
+}
+
+.modern-auth-input:focus,
+.modern-auth-input:focus-within {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 2px rgba(1, 125, 176, 0.1) !important;
+}
+
+/* Link styling */
+.forgot-link,
+.auth-action-link,
+.terms-link {
+  color: var(--primary) !important;
+}
+
+.forgot-link:hover,
+.auth-action-link:hover,
+.terms-link:hover {
+  color: var(--primary-dark) !important;
+}
+
+/* Role card styling */
+.role-card {
+  border: 2px solid var(--light-grey) !important;
+  background-color: var(--white) !important;
+}
+
+.role-card:hover {
+  border-color: var(--primary) !important;
+  background-color: rgba(1, 125, 176, 0.05) !important;
+}
+
+.role-card.ant-radio-button-wrapper-checked {
+  border-color: var(--primary) !important;
+  background-color: rgba(1, 125, 176, 0.1) !important;
+}
+
+.role-icon {
+  color: var(--primary) !important;
+}
+
+/* Fix for auth form input overlays */
+.auth-input,
+input[type="text"].auth-input,
+input[type="email"].auth-input,
+input[type="password"].auth-input {
+  background: #fff !important;
+  position: relative !important;
+  z-index: 1 !important;
+  box-shadow: none !important;
+  padding-left: 2.5rem !important; /* 40px for left icon */
+  padding-right: 1rem !important;  /* 16px for right icon */
+  border-radius: 0.75rem !important; /* 12px */
+  border: 1px solid var(--mid-grey, #ced4da) !important;
+  height: 44px !important;
+  font-size: 16px !important;
+}
+
+.auth-input:focus {
+  background: #fff !important;
+  z-index: 2 !important;
+  box-shadow: 0 0 0 2px rgba(1, 125, 176, 0.1) !important;
+  border-color: var(--primary, #017DB0) !important;
+}
+
+.auth-input::placeholder {
+  color: #9ca3af !important;
+  opacity: 1 !important;
+  font-size: 14px !important;
+}
