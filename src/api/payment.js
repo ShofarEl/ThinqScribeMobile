@@ -1,4 +1,3 @@
-// ThinqScribe/src/api/payment.js
 import client from './client';
 
 export const paymentApi = {

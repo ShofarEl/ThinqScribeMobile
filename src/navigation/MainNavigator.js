@@ -6,8 +6,11 @@ import React from 'react';
 import { useAuth } from '../context/MobileAuthContext';
 
 // Dashboard screens
+import AgreementDetails from '../screens/AgreementDetails';
 import ExploreScreen from '../screens/ExploreScreen';
 import MessagesScreen from '../screens/MessagesScreen';
+import PaymentFailed from '../screens/PaymentFailed';
+import PaymentSuccess from '../screens/PaymentSuccess';
 import ProfileScreen from '../screens/ProfileScreen';
 import ProfileSettings from '../screens/ProfileSettings';
 import StudentChat from '../screens/StudentChat';
@@ -50,6 +53,27 @@ const DashboardStack = () => {
         component={StudentWriterList}
         options={{
           title: 'Find Projects'
+        }}
+      />
+      <Stack.Screen
+        name="AgreementDetails"
+        component={AgreementDetails}
+        options={{
+          title: 'Agreement Details'
+        }}
+      />
+      <Stack.Screen
+        name="PaymentSuccess"
+        component={PaymentSuccess}
+        options={{
+          title: 'Payment Successful'
+        }}
+      />
+      <Stack.Screen
+        name="PaymentFailed"
+        component={PaymentFailed}
+        options={{
+          title: 'Payment Failed'
         }}
       />
     </Stack.Navigator>

@@ -12,9 +12,10 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
-import { Button, Card, Checkbox, SegmentedButtons, TextInput } from 'react-native-paper';
+import { Button, Card, SegmentedButtons, TextInput } from 'react-native-paper';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -154,6 +155,7 @@ const SignUpScreen: React.FC = () => {
       setErrors({});
 
       const signupData = {
+        name: `${formData.firstName} ${formData.lastName}`.trim(), // Combine firstName and lastName into name
         firstName: formData.firstName,
         lastName: formData.lastName,
         email: formData.email,
@@ -350,12 +352,14 @@ const SignUpScreen: React.FC = () => {
                       <Text style={styles.stepSubtitle}>Review and accept our terms</Text>
 
                       <View style={styles.termsContainer}>
-                        <Checkbox
-                          status={formData.agreeToTerms ? 'checked' : 'unchecked'}
+                        <TouchableOpacity
                           onPress={() => setFormData({ ...formData, agreeToTerms: !formData.agreeToTerms })}
-                          theme={styles.checkboxTheme}
-                          color={colors.primary[500]}
-                        />
+                          style={styles.checkbox}
+                        >
+                          {formData.agreeToTerms && (
+                            <Text style={styles.checkmark}>✓</Text>
+                          )}
+                        </TouchableOpacity>
                         <View style={styles.termsTextContainer}>
                           <Text style={styles.termsText}>I agree to the </Text>
                           <Button 
@@ -404,16 +408,16 @@ const SignUpScreen: React.FC = () => {
                         Next
                       </Button>
                     ) : (
-                  <Button
-                    mode="contained"
-                    onPress={handleSubmit}
-                    loading={isSubmitting}
-                    disabled={isSubmitting || isLoading}
+                      <Button
+                        mode="contained"
+                        onPress={handleSubmit}
+                        loading={isSubmitting}
+                        disabled={isSubmitting || isLoading}
                         style={[styles.navButton, styles.submitButton]}
                         labelStyle={styles.submitButtonText}
-                  >
-                    {isSubmitting ? 'Creating Account...' : 'Create Account'}
-                  </Button>
+                      >
+                        {isSubmitting ? 'Creating Account...' : 'Create Account'}
+                      </Button>
                     )}
                   </View>
 
@@ -433,9 +437,9 @@ const SignUpScreen: React.FC = () => {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  gradient: { 
+  gradient: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f0f8ff', // Light blue background
     position: 'relative',
   },
   decorativeContainer: {
@@ -453,7 +457,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: 'rgba(1, 83, 130, 0.12)',
+    backgroundColor: 'rgba(1, 83, 130, 0.20)',
   },
   circle2: {
     position: 'absolute',
@@ -462,7 +466,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(1, 83, 130, 0.08)',
+    backgroundColor: 'rgba(1, 83, 130, 0.15)',
   },
   circle3: {
     position: 'absolute',
@@ -471,7 +475,7 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: 'rgba(1, 83, 130, 0.10)',
+    backgroundColor: 'rgba(1, 83, 130, 0.18)',
   },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 40, paddingBottom: 20 },
@@ -544,7 +548,10 @@ const styles = StyleSheet.create({
     marginBottom: 12, 
     color: colors.neutral[700] 
   },
-  segmentedButtons: { marginBottom: 16 },
+  segmentedButtons: { 
+    marginBottom: 16,
+    backgroundColor: colors.white,
+  },
   input: { 
     marginBottom: 8,
     backgroundColor: '#ffffff',
@@ -614,6 +621,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 24,
     gap: 12,
+    width: '100%',
+    alignItems: 'center',
   },
   navButton: {
     flex: 1,
@@ -635,7 +644,6 @@ const styles = StyleSheet.create({
     fontSize: typography.sizes.base,
   },
   submitButton: { 
-    marginTop: 16, 
     borderRadius: 12,
     backgroundColor: colors.primary[500],
   },
@@ -651,15 +659,40 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start', 
     marginVertical: 16,
     paddingHorizontal: 4,
-    backgroundColor: colors.neutral[50],
+    backgroundColor: '#015382',
     borderRadius: 8,
-    padding: 12,
+    padding: 16,
+    width: '100%',
+    borderWidth: 1,
+    borderColor: '#015382',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  checkbox: {
+    borderWidth: 3,
+    borderColor: '#015382',
+    borderRadius: 4,
+    backgroundColor: '#ffffff',
+    width: 24,
+    height: 24,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkmark: {
+    color: '#015382',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   checkboxTheme: {
     colors: {
       primary: colors.primary[500],
       onSurface: colors.primary[500],
       surface: colors.white,
+      outline: '#015382',
     },
   } as any,
   termsTextContainer: { 
@@ -669,18 +702,19 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginLeft: 8,
     paddingTop: 2,
+    justifyContent: 'flex-start',
   },
   termsText: { 
     fontFamily: typography.fonts.caption.fontFamily,
     fontWeight: '500' as const,
     fontSize: typography.sizes.sm, 
-    color: colors.neutral[600],
+    color: '#ffffff',
     lineHeight: typography.lineHeights.normal * typography.sizes.sm,
   },
   linkText: {
     fontFamily: typography.fonts.bodySemibold.fontFamily,
     fontWeight: '600' as const,
-    color: colors.primary[500],
+    color: '#ffffff',
     fontSize: typography.sizes.sm,
     textDecorationLine: 'underline',
   },

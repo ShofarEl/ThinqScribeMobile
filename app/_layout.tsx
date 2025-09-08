@@ -55,6 +55,9 @@ export default function RootLayout() {
                 <Stack.Screen name="privacy" />
                 <Stack.Screen name="terms" />
                 <Stack.Screen name="support" />
+                <Stack.Screen name="agreement/[agreementId]" />
+                <Stack.Screen name="payment-success" />
+                <Stack.Screen name="payment-failed" />
                 <Stack.Screen name="+not-found" />
                 <Stack.Screen name="[...missing]" />
               </Stack>

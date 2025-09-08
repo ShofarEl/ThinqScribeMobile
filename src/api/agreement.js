@@ -1,6 +1,6 @@
 // ThinqScribe/src/api/agreement.js
-import { API_BASE_URL, API_ENDPOINTS } from './constants.js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL, API_ENDPOINTS } from './constants.js';
 
 // Helper function to get authorization headers
 const getAuthHeaders = async () => {
@@ -117,11 +117,15 @@ export const agreementApi = {
   // Create enhanced payment session with multi-currency and gateway support
   createEnhancedPaymentSession: async (agreementId, options = {}) => {
     try {
-      const { currency, gateway, paymentMethod = 'card' } = options;
+      const { currency, gateway, paymentMethod = 'card', amount, paymentType = 'next' } = options;
       
-      const response = await makeRequest(`${API_BASE_URL}/agreements/${agreementId}/payment`, {
+      // 🔧 FIXED: Use the correct enhanced payment endpoint from web version
+      const response = await makeRequest(`${API_BASE_URL}${API_ENDPOINTS.PAYMENT.CREATE_ENHANCED_CHECKOUT}`, {
         method: 'POST',
         body: JSON.stringify({
+          agreementId,
+          paymentType,
+          amount,
           currency,
           gateway,
           paymentMethod
@@ -155,14 +159,29 @@ export const agreementApi = {
         currency,
         paymentMethod,
         amount,
-        location
+        location,
+        paymentType = 'next'
       } = paymentData;
 
+      console.log('💳 [AgreementAPI] Processing payment:', {
+        agreementId,
+        gateway,
+        currency,
+        paymentMethod,
+        amount,
+        paymentType
+      });
+
+      // 🔧 FIXED: Use enhanced payment session with all required data
       const response = await agreementApi.createEnhancedPaymentSession(agreementId, {
         currency,
         gateway,
-        paymentMethod
+        paymentMethod,
+        amount,
+        paymentType
       });
+
+      console.log('💳 [AgreementAPI] Payment session response:', response);
 
       if (response.success) {
         // Handle different gateway responses

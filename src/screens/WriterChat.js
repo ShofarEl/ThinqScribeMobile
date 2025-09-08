@@ -1032,10 +1032,43 @@ const WriterChat = () => {
     }
   };
 
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount, agreement = null) => {
+    // Detect currency from agreement if available
+    let currency = 'USD';
+
+    if (agreement?.paymentPreferences) {
+      const prefs = agreement.paymentPreferences;
+
+      // Check for explicit currency setting
+      if (prefs.currency === 'ngn') {
+        currency = 'NGN';
+      }
+      // Check for Paystack gateway (typically NGN)
+      else if (prefs.gateway === 'paystack') {
+        currency = 'NGN';
+      }
+      // Check for native amount indicators
+      else if (prefs.nativeAmount && prefs.nativeAmount !== agreement.totalAmount && prefs.exchangeRate === 1) {
+        currency = 'NGN';
+      }
+      else if (prefs.nativeAmount && prefs.nativeAmount > 5000) {
+        currency = 'NGN';
+      }
+      // Default to explicit currency or USD
+      else {
+        currency = (prefs.currency || 'USD').toUpperCase();
+      }
+    }
+
+    console.log('💵 [WriterChat] Formatting currency:', {
+      amount,
+      currency,
+      agreementId: agreement?._id
+    });
+
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: currency
     }).format(amount);
   };
 
@@ -1103,7 +1136,7 @@ const WriterChat = () => {
             Student: {agreement.studentName}
           </Text>
           <Text style={styles.agreementAmount}>
-            {formatCurrency(agreement.amount)}
+            {formatCurrency(agreement.amount, agreement)}
           </Text>
         </View>
         

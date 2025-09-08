@@ -1,5 +1,5 @@
-import { API_BASE_URL, API_ENDPOINTS } from './constants.js';
 import { getPaymentErrorMessage } from '../utils/errorMessages.js';
+import { API_BASE_URL, API_ENDPOINTS } from './constants.js';
 
 // Enhanced Payment API Service
 class EnhancedPaymentAPI {
@@ -108,19 +108,23 @@ class EnhancedPaymentAPI {
   // Create enhanced checkout session
   async createEnhancedCheckoutSession(paymentData) {
     try {
+      // 🔧 CRITICAL: Validate payment data before sending
+      const validatedData = this.validatePaymentData(paymentData);
+      
       console.log('💳 [EnhancedPayment] Creating checkout session with data:', {
-        agreementId: paymentData.agreementId,
-        amount: paymentData.amount,
-        currency: paymentData.currency,
-        gateway: paymentData.gateway,
-        paymentMethod: paymentData.paymentMethod,
-        location: paymentData.location || paymentData.userLocation,
-        allKeys: Object.keys(paymentData)
+        agreementId: validatedData.agreementId,
+        amount: validatedData.amount,
+        currency: validatedData.currency,
+        gateway: validatedData.gateway,
+        paymentMethod: validatedData.paymentMethod,
+        location: validatedData.location || validatedData.userLocation,
+        validation: { originalAmount: paymentData.amount, validatedAmount: validatedData.amount },
+        allKeys: Object.keys(validatedData)
       });
       
       const response = await this.makeRequest(this.endpoints.CREATE_ENHANCED_CHECKOUT, {
         method: 'POST',
-        body: JSON.stringify(paymentData)
+        body: JSON.stringify(validatedData)
       });
       
       console.log('💳 [EnhancedPayment] Checkout session response:', response);
@@ -129,6 +133,57 @@ class EnhancedPaymentAPI {
       console.error('💳 [EnhancedPayment] Failed to create checkout session:', error);
       throw error;
     }
+  }
+
+  // 🔧 NEW: Validate payment data before API call
+  validatePaymentData(paymentData) {
+    const validated = { ...paymentData };
+    
+    // Ensure amount is valid and properly rounded
+    const amount = parseFloat(paymentData.amount);
+    if (isNaN(amount) || amount < 0.002) {
+      console.error('💳 [EnhancedPayment] Invalid amount:', { original: paymentData.amount, parsed: amount });
+      throw new Error(`Invalid payment amount: ${paymentData.amount}. Minimum amount is 0.002.`);
+    }
+    
+    // 🔧 CRITICAL: Round to 3 decimal places and ensure minimum
+    const roundedAmount = Math.round(amount * 1000) / 1000;
+    const finalAmount = Math.max(roundedAmount, 0.002);
+    
+    console.log('💳 [EnhancedPayment] Amount validation:', {
+      original: paymentData.amount,
+      parsed: amount,
+      rounded: roundedAmount,
+      final: finalAmount
+    });
+    
+    validated.amount = finalAmount;
+    
+    // Ensure currency is valid
+    if (!paymentData.currency || typeof paymentData.currency !== 'string') {
+      throw new Error('Invalid currency provided');
+    }
+    
+    validated.currency = paymentData.currency.toLowerCase();
+    
+    // Ensure gateway is valid
+    if (!paymentData.gateway) {
+      throw new Error('Payment gateway is required');
+    }
+    
+    // Ensure agreement ID is valid
+    if (!paymentData.agreementId) {
+      throw new Error('Agreement ID is required');
+    }
+    
+    console.log('💳 [EnhancedPayment] Payment data validated successfully:', {
+      amount: validated.amount,
+      currency: validated.currency,
+      gateway: validated.gateway,
+      agreementId: validated.agreementId
+    });
+    
+    return validated;
   }
 
   // Get currency conversion rate

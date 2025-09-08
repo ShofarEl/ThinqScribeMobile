@@ -1,4 +1,4 @@
-// Currency Service
+// Currency Service - React Native Version
 // Handles multi-currency support, exchange rates, and currency formatting
 
 class CurrencyService {
@@ -532,4 +532,4 @@ class CurrencyService {
 // Create singleton instance
 const currencyService = new CurrencyService();
 
-export default currencyService; 
+export default currencyService;

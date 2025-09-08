@@ -340,7 +340,7 @@ const styles = StyleSheet.create({
   },
   gradient: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f0f8ff', // Light blue background
     position: 'relative',
   },
   decorativeContainer: {
@@ -358,7 +358,7 @@ const styles = StyleSheet.create({
     width: 200,
     height: 200,
     borderRadius: 100,
-    backgroundColor: 'rgba(1, 83, 130, 0.12)',
+    backgroundColor: 'rgba(1, 83, 130, 0.20)',
   },
   circle2: {
     position: 'absolute',
@@ -367,7 +367,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(1, 83, 130, 0.08)',
+    backgroundColor: 'rgba(1, 83, 130, 0.15)',
   },
   circle3: {
     position: 'absolute',
@@ -376,7 +376,7 @@ const styles = StyleSheet.create({
     width: 160,
     height: 160,
     borderRadius: 80,
-    backgroundColor: 'rgba(1, 83, 130, 0.10)',
+    backgroundColor: 'rgba(1, 83, 130, 0.18)',
   },
   keyboardView: {
     flex: 1,

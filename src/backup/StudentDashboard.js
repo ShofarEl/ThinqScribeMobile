@@ -613,12 +613,7 @@ const StudentDashboard = () => {
 
             {/* Action Buttons */}
             <View style={styles.actionButtonsDetailed}>
-              <TouchableOpacity
-                style={styles.viewButtonDetailed}
-                onPress={() => router.push({
-                  pathname: `/agreement/${agreement._id}`
-                })}
-              >
+              <TouchableOpacity style={styles.viewButtonDetailed}>
                 <Ionicons name="eye-outline" size={16} color="#015382" />
                 <Text style={styles.buttonTextDetailed}>View Details</Text>
               </TouchableOpacity>
@@ -825,11 +820,9 @@ const StudentDashboard = () => {
               >
                 Chat
               </Button>
-              <Button
-                mode="outlined"
-                onPress={() => router.push({
-                  pathname: `/agreement/${agreement._id}`
-                })}
+              <Button 
+                mode="outlined" 
+                onPress={() => console.log('View details')}
                 style={[styles.actionButton]}
                 compact
               >
@@ -839,12 +832,9 @@ const StudentDashboard = () => {
           )}
           
           {agreement.status === 'completed' && (
-            <Button
-              mode="outlined"
-              onPress={() => router.push({
-                pathname: '/agreement-details',
-                params: { agreementId: agreement._id }
-              })}
+            <Button 
+              mode="outlined" 
+              onPress={() => console.log('View details')}
               style={[styles.actionButton]}
               compact
             >

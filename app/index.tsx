@@ -23,6 +23,12 @@ export default function IndexScreen() {
     return (
       <View style={styles.container}>
         <StatusBar style="dark" />
+        {/* Decorative Background Elements */}
+        <View style={styles.decorativeContainer}>
+          <View style={styles.circle1} />
+          <View style={styles.circle2} />
+          <View style={styles.circle3} />
+        </View>
         <View style={styles.content}>
           <Image 
             source={require('../assets/images/Thinq-Scribe.png')} 
@@ -38,6 +44,12 @@ export default function IndexScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
+      {/* Decorative Background Elements */}
+      <View style={styles.decorativeContainer}>
+        <View style={styles.circle1} />
+        <View style={styles.circle2} />
+        <View style={styles.circle3} />
+      </View>
       <View style={styles.content}>
         <Image 
           source={require('../assets/images/Thinq-Scribe.png')} 
@@ -67,7 +79,8 @@ export default function IndexScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: '#f0f8ff', // Light blue background
+    position: 'relative',
   },
   content: {
     flex: 1,
@@ -113,5 +126,40 @@ const styles = StyleSheet.create({
     color: colors.white,
     fontSize: typography.sizes.lg,
     textAlign: 'center',
+  },
+  decorativeContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 0,
+  },
+  circle1: {
+    position: 'absolute',
+    top: -50,
+    right: -50,
+    width: 200,
+    height: 200,
+    borderRadius: 100,
+    backgroundColor: 'rgba(1, 83, 130, 0.20)',
+  },
+  circle2: {
+    position: 'absolute',
+    bottom: -100,
+    left: -100,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: 'rgba(1, 83, 130, 0.15)',
+  },
+  circle3: {
+    position: 'absolute',
+    top: '40%',
+    right: -80,
+    width: 160,
+    height: 160,
+    borderRadius: 80,
+    backgroundColor: 'rgba(1, 83, 130, 0.18)',
   },
 });

@@ -1,40 +1,36 @@
-import React, { useState, useEffect } from 'react';
 import {
-  Modal,
-  Card,
-  Row,
-  Col,
-  Button,
-  Select,
-  Typography,
-  Space,
-  Alert,
-  Divider,
-  Tag,
-  Tooltip,
-  Spin,
-  Radio,
-  Input,
-  message
-} from 'antd';
-import {
-  CreditCardOutlined,
   BankOutlined,
-  MobileOutlined,
-  GlobalOutlined,
-  DollarOutlined,
-  InfoCircleOutlined,
   CheckCircleOutlined,
-  WarningOutlined,
+  CreditCardOutlined,
+  GlobalOutlined,
+  MobileOutlined,
   PayCircleOutlined,
-  QrcodeOutlined
+  QrcodeOutlined,
+  WarningOutlined
 } from '@ant-design/icons';
+import {
+  Alert,
+  Button,
+  Card,
+  Col,
+  Divider,
+  message,
+  Modal,
+  Radio,
+  Row,
+  Select,
+  Space,
+  Spin,
+  Tag,
+  Typography
+} from 'antd';
+import React, { useEffect, useState } from 'react';
 
-import locationService from '../services/locationService';
-import currencyService from '../services/currencyService';
-import paymentGatewayService from '../services/paymentGatewayService';
 import enhancedPaymentAPI from '../api/enhancedPayment';
 import { useCurrency } from '../hooks/useCurrency';
+import currencyService from '../services/currencyService';
+import locationService from '../services/locationService';
+import paymentGatewayService from '../services/paymentGatewayService';
 
 const { Title, Text, Paragraph } = Typography;
 const { Option } = Select;
@@ -273,10 +269,28 @@ const EnhancedPaymentModal = ({
         return;
       }
       
+      // 🔧 CRITICAL: Final amount validation and rounding before payment
+      let finalAmount = convertedAmount || initialAmount;
+      
+      // Round to 3 decimal places for more precision
+      finalAmount = Math.round(finalAmount * 1000) / 1000;
+      
+      // Ensure minimum amount
+      if (finalAmount < 0.002) {
+        finalAmount = 0.002; // Set to minimum instead of erroring
+        console.warn('💳 Amount was below minimum, setting to 0.002');
+      }
+      
+      console.log('💳 [EnhancedPaymentModal] Final amount validation:', {
+        original: initialAmount,
+        converted: convertedAmount,
+        final: finalAmount
+      });
+      
       const paymentData = {
         gateway: selectedGateway.id,
         method: selectedPaymentMethod.id,
-        amount: convertedAmount, // 🔧 This is now the correctly converted amount
+        amount: finalAmount, // 🔧 Use validated and rounded amount
         currency: selectedCurrency,
         agreementCurrency: agreementCurrency, // 🆕 Pass agreement's native currency
         agreementId,
@@ -289,7 +303,7 @@ const EnhancedPaymentModal = ({
       const paymentResponse = await enhancedPaymentAPI.createEnhancedCheckoutSession({
         agreementId,
         paymentType: 'next',
-        amount: convertedAmount,
+        amount: finalAmount, // 🔧 Use validated final amount
         currency: selectedCurrency,
         gateway: selectedGateway.id,
         paymentMethod: selectedPaymentMethod.id,

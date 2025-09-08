@@ -63,6 +63,7 @@ const CreateAgreement = () => {
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [showReviewModal, setShowReviewModal] = useState(false);
+  const [showDatePickerModal, setShowDatePickerModal] = useState(false); // For Android modal wrapper
 
   const steps = [
     { title: 'Project Details', icon: 'file-document-outline', color: '#3b82f6' },
@@ -180,12 +181,21 @@ const CreateAgreement = () => {
 
   const showDatePickerFor = (type) => {
     setDatePickerType(type);
-    setShowDatePicker(true);
+    
+    // Force immediate display of date picker
+    if (Platform.OS === 'android') {
+      setShowDatePickerModal(true);
+    } else {
+      setShowDatePicker(true);
+    }
   };
 
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
-    if (selectedDate) {
+    setShowDatePickerModal(false);
+    
+    // Only update if user confirmed the selection
+    if (selectedDate && (event.type === 'set' || Platform.OS === 'ios')) {
       if (datePickerType === 'deadline') {
         updateFormData('deadline', selectedDate);
       } else if (typeof datePickerType === 'number') {
@@ -651,7 +661,7 @@ const CreateAgreement = () => {
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
-      <LinearGradient colors={['#3b82f6', '#1d4ed8']} style={styles.header}>
+      <LinearGradient colors={['#015382', '#015382']} style={styles.header}>
         <View style={styles.headerContent}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Icon name="arrow-left" size={24} color="white" />
@@ -698,15 +708,44 @@ const CreateAgreement = () => {
         </View>
       </KeyboardAvoidingView>
 
-      {/* Date Picker */}
-      {showDatePicker && (
+      {/* Date Picker for iOS */}
+      {showDatePicker && Platform.OS === 'ios' && (
         <DateTimePicker
           value={datePickerType === 'deadline' ? formData.deadline : formData.installments[datePickerType]?.dueDate || new Date()}
           mode="date"
-          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+          display="default"
           onChange={handleDateChange}
           minimumDate={new Date()}
         />
+      )}
+
+      {/* Date Picker Modal for Android */}
+      {showDatePickerModal && Platform.OS === 'android' && (
+        <Modal
+          transparent={true}
+          animationType="fade"
+          visible={showDatePickerModal}
+          onRequestClose={() => setShowDatePickerModal(false)}
+        >
+          <View style={styles.datePickerModalOverlay}>
+            <View style={styles.datePickerModalContent}>
+              <DateTimePicker
+                value={datePickerType === 'deadline' ? formData.deadline : formData.installments[datePickerType]?.dueDate || new Date()}
+                mode="date"
+                display="calendar"
+                onChange={handleDateChange}
+                minimumDate={new Date()}
+                style={styles.datePicker}
+              />
+              <TouchableOpacity
+                style={styles.datePickerCancelButton}
+                onPress={() => setShowDatePickerModal(false)}
+              >
+                <Text style={styles.datePickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       )}
 
       {/* Review Modal */}
@@ -1132,6 +1171,42 @@ const styles = StyleSheet.create({
   submitButton: {
     flex: 1,
     backgroundColor: '#059669',
+  },
+  datePickerModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  datePickerModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    margin: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+  },
+  datePicker: {
+    backgroundColor: 'white',
+  },
+  datePickerCancelButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+  },
+  datePickerCancelText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#374151',
   },
 });
 

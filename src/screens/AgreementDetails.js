@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Alert,
     Dimensions,
@@ -19,9 +19,11 @@ import {
     ProgressBar
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { completeAgreement, getAgreement } from '../api/agreement';
+import { agreementApi } from '../api/agreement';
+import EnhancedPaymentModal from '../components/EnhancedPaymentModal';
 import { useAppLoading } from '../context/AppLoadingContext';
 import { useAuth } from '../context/MobileAuthContext';
+import { useCurrency } from '../hooks/useCurrency';
 
 const { width } = Dimensions.get('window');
 
@@ -30,11 +32,23 @@ const AgreementDetails = () => {
   const router = useRouter();
   const { user } = useAuth();
   const { setLoading: setGlobalLoading } = useAppLoading();
+  const { formatLocal } = useCurrency();
 
   // State
   const [agreement, setAgreement] = useState(null);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState(false);
+
+  // Payment state
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [paymentType, setPaymentType] = useState('next'); // 'next', 'full', 'custom'
+  const [paymentAmount, setPaymentAmount] = useState(0);
+
+  console.log('💳 [AgreementDetails] Payment state:', { 
+    paymentModalVisible, 
+    paymentType, 
+    paymentAmount 
+  });
 
   useEffect(() => {
     if (agreementId) {
@@ -48,8 +62,12 @@ const AgreementDetails = () => {
   const fetchAgreement = async () => {
     try {
       console.log('📱 [AgreementDetails] Fetching agreement:', agreementId);
-      const agreementData = await getAgreement(agreementId);
+      const agreementData = await agreementApi.getAgreement(agreementId);
       console.log('📱 [AgreementDetails] Agreement data:', agreementData);
+      console.log('📱 [AgreementDetails] Agreement status:', agreementData?.status);
+      console.log('📱 [AgreementDetails] Agreement installments:', agreementData?.installments);
+      console.log('📱 [AgreementDetails] Agreement totalAmount:', agreementData?.totalAmount);
+      console.log('📱 [AgreementDetails] Agreement paidAmount:', agreementData?.paidAmount);
       
       if (!agreementData) {
         throw new Error('Agreement not found');
@@ -76,7 +94,7 @@ const AgreementDetails = () => {
           onPress: async () => {
             try {
               setUpdating(true);
-              await completeAgreement(agreementId);
+              await agreementApi.completeAgreement(agreementId);
               
               // Refresh agreement data
               await fetchAgreement();
@@ -94,11 +112,179 @@ const AgreementDetails = () => {
     );
   };
 
-  const formatCurrency = (amount, currency = 'USD') => {
-    return new Intl.NumberFormat('en-US', {
+  // Payment handling functions
+  const openPaymentModal = (type, amount = null) => {
+    try {
+      console.log('💳 [AgreementDetails] Opening payment modal:', { type, amount, currentPaymentType: paymentType });
+
+      // 🔧 CRITICAL: Validate agreement before opening payment modal
+      if (!agreement) {
+        console.error('💳 [AgreementDetails] No agreement data available');
+        Alert.alert('Error', 'Agreement data not available. Please refresh and try again.');
+        return;
+      }
+
+      if (agreement.status !== 'active') {
+        console.error('💳 [AgreementDetails] Agreement not active:', agreement.status);
+        Alert.alert('Error', 'This agreement is not active and cannot accept payments.');
+        return;
+      }
+
+      setPaymentType(type);
+
+      const nextInstallment = getNextInstallment();
+      console.log('💳 [AgreementDetails] Next installment for payment:', nextInstallment);
+
+      if (type === 'next' && nextInstallment) {
+        if (!nextInstallment.amount || nextInstallment.amount <= 0) {
+          console.error('💳 [AgreementDetails] Next installment has invalid amount:', nextInstallment);
+          Alert.alert('Error', 'Next installment has no valid amount. Please contact support.');
+          return;
+        }
+        console.log('💳 [AgreementDetails] Setting payment amount from next installment:', nextInstallment.amount);
+        setPaymentAmount(nextInstallment.amount);
+      } else if (type === 'full') {
+        const remainingAmount = (agreement?.totalAmount || 0) - (agreement?.paidAmount || 0);
+        if (remainingAmount <= 0) {
+          console.error('💳 [AgreementDetails] No remaining amount to pay:', remainingAmount);
+          Alert.alert('Info', 'This agreement is already fully paid.');
+          return;
+        }
+        console.log('💳 [AgreementDetails] Setting payment amount to full remaining:', remainingAmount);
+        setPaymentAmount(remainingAmount);
+      } else if (type === 'custom' && amount) {
+        if (!amount || amount <= 0) {
+          console.error('💳 [AgreementDetails] Invalid custom amount:', amount);
+          Alert.alert('Error', 'Please enter a valid payment amount.');
+          return;
+        }
+        console.log('💳 [AgreementDetails] Setting custom payment amount:', amount);
+        setPaymentAmount(amount);
+      }
+
+      setPaymentModalVisible(true);
+    } catch (error) {
+      console.error('💳 [AgreementDetails] Error opening payment modal:', error);
+      Alert.alert('Error', 'Failed to open payment modal. Please try again.');
+    }
+  };
+
+  const handlePaymentSuccess = async (paymentData, currentPaymentType) => {
+    try {
+      console.log('💳 Payment completed successfully:', paymentData);
+
+      // Update local agreement state
+      const nextInstallment = getNextInstallment();
+      const updatedInstallments = agreement.installments?.map(inst => {
+        if (currentPaymentType === 'next' && inst._id === nextInstallment?._id) {
+          return {
+            ...inst,
+            status: 'paid',
+            isPaid: true,
+            paymentDate: new Date(),
+            transactionAmount: paymentData.amount,
+            transactionCurrency: paymentData.currency,
+            gateway: paymentData.gateway
+          };
+        }
+        return inst;
+      }) || [];
+
+      const newPaidAmount = currentPaymentType === 'full' ?
+        agreement.totalAmount :
+        (agreement.paidAmount || 0) + paymentData.amount;
+
+      setAgreement(prev => ({
+        ...prev,
+        installments: updatedInstallments,
+        paidAmount: newPaidAmount,
+        status: 'active'
+      }));
+
+      setPaymentModalVisible(false);
+
+      Alert.alert(
+        'Payment Successful',
+        `Your payment has been processed successfully via ${paymentData.gateway}.`,
+        [
+          { text: 'OK' }
+        ]
+      );
+
+      // Navigate to payment success screen
+      router.push({
+        pathname: '/payment-success',
+        params: {
+          agreementId: agreementId,
+          amount: paymentData.amount,
+          currency: paymentData.currency,
+          gateway: paymentData.gateway
+        }
+      });
+
+    } catch (err) {
+      console.error('Error handling payment success:', err);
+      Alert.alert('Error', 'Payment was successful but there was an error updating the display.');
+    }
+  };
+
+  const handlePaymentCancel = () => {
+    setPaymentModalVisible(false);
+  };
+
+  // Detect currency from agreement payment preferences
+  const getAgreementCurrency = () => {
+    if (!agreement?.paymentPreferences) {
+      console.log('💵 [AgreementDetails] No payment preferences found, defaulting to USD');
+      return 'USD';
+    }
+
+    const prefs = agreement.paymentPreferences;
+    console.log('💵 [AgreementDetails] Payment preferences:', prefs);
+
+    // Check for explicit currency setting
+    if (prefs.currency === 'ngn') {
+      console.log('💵 [AgreementDetails] Currency detected: NGN (explicit setting)');
+      return 'NGN';
+    }
+
+    // Check for Paystack gateway (typically NGN)
+    if (prefs.gateway === 'paystack') {
+      console.log('💵 [AgreementDetails] Currency detected: NGN (Paystack gateway)');
+      return 'NGN';
+    }
+
+    // Check for native amount indicators
+    if (prefs.nativeAmount && prefs.nativeAmount !== agreement.totalAmount && prefs.exchangeRate === 1) {
+      console.log('💵 [AgreementDetails] Currency detected: NGN (native amount indicator)');
+      return 'NGN';
+    }
+    if (prefs.nativeAmount && prefs.nativeAmount > 5000) {
+      console.log('💵 [AgreementDetails] Currency detected: NGN (large native amount)');
+      return 'NGN';
+    }
+
+    // Default to USD or explicit currency
+    const finalCurrency = (prefs.currency || 'USD').toUpperCase();
+    console.log('💵 [AgreementDetails] Currency detected:', finalCurrency, '(default/fallback)');
+    return finalCurrency;
+  };
+
+  const formatCurrency = (amount, currencyOverride) => {
+    const currency = currencyOverride || getAgreementCurrency();
+    const formatted = new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: currency.toUpperCase()
     }).format(amount || 0);
+
+    console.log('💵 [AgreementDetails] Formatting currency:', {
+      amount,
+      currency,
+      formatted,
+      currencyOverride
+    });
+
+    return formatted;
   };
 
   const formatDate = (dateString) => {
@@ -139,8 +325,22 @@ const AgreementDetails = () => {
   };
 
   const getNextInstallment = () => {
-    if (!agreement?.installments) return null;
-    return agreement.installments.find(inst => inst.status === 'pending');
+    console.log('🔍 [AgreementDetails] Getting next installment...');
+    console.log('🔍 [AgreementDetails] Agreement:', agreement ? 'exists' : 'null');
+    console.log('🔍 [AgreementDetails] Installments:', agreement?.installments);
+
+    if (!agreement?.installments) {
+      console.log('🔍 [AgreementDetails] No installments found');
+      return null;
+    }
+
+    const pendingInstallments = agreement.installments.filter(inst => inst.status === 'pending');
+    console.log('🔍 [AgreementDetails] Pending installments:', pendingInstallments);
+
+    const nextInstallment = agreement.installments.find(inst => inst.status === 'pending');
+    console.log('🔍 [AgreementDetails] Next installment found:', nextInstallment);
+
+    return nextInstallment;
   };
 
   const renderHeader = () => (
@@ -323,14 +523,14 @@ const AgreementDetails = () => {
             <Text style={styles.nextPaymentTitle}>Next Payment Due</Text>
             <View style={styles.nextPaymentInfo}>
               <Text style={styles.nextPaymentAmount}>
-                {formatCurrency(nextInstallment.amount)}
+                {formatCurrency(nextInstallment.amount || 0)}
               </Text>
               <Text style={styles.nextPaymentDate}>
-                Due: {new Date(nextInstallment.dueDate).toLocaleDateString('en-US', {
+                Due: {nextInstallment.dueDate ? new Date(nextInstallment.dueDate).toLocaleDateString('en-US', {
                   month: 'short',
                   day: 'numeric',
                   year: 'numeric'
-                })}
+                }) : 'Date not available'}
               </Text>
             </View>
           </View>
@@ -405,6 +605,91 @@ const AgreementDetails = () => {
               Accept Agreement
             </Button>
           </View>
+        </Card>
+      );
+    }
+
+    // Payment actions for students
+    if (agreement?.status === 'active' && user?.role === 'student') {
+      const nextInstallment = getNextInstallment();
+      const remainingAmount = (agreement?.totalAmount || 0) - (agreement?.paidAmount || 0);
+
+      return (
+        <Card style={styles.card}>
+          <Text style={styles.cardTitle}>💳 Payment Actions</Text>
+
+          {nextInstallment && (
+            <View style={styles.paymentAction}>
+              <Text style={styles.paymentActionTitle}>Next Payment Due</Text>
+              <View style={styles.paymentActionInfo}>
+                <Text style={styles.paymentActionAmount}>
+                  {formatCurrency(nextInstallment.amount || 0)}
+                </Text>
+                <Text style={styles.paymentActionDate}>
+                  Due: {nextInstallment.dueDate ? new Date(nextInstallment.dueDate).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric'
+                  }) : 'Date not available'}
+                </Text>
+              </View>
+
+              <View style={styles.paymentButtons}>
+                <Button
+                  mode="contained"
+                  onPress={() => openPaymentModal('next')}
+                  style={[styles.paymentButton, styles.primaryPaymentButton]}
+                  icon="credit-card"
+                >
+                  Pay Next Installment
+                </Button>
+
+                {nextInstallment?.amount && remainingAmount && remainingAmount > nextInstallment.amount && (
+                  <Button
+                    mode="outlined"
+                    onPress={() => openPaymentModal('full')}
+                    style={[styles.paymentButton, styles.secondaryPaymentButton]}
+                    icon="cash-multiple"
+                  >
+                    Pay Full Amount
+                  </Button>
+                )}
+              </View>
+            </View>
+          )}
+
+          {!nextInstallment && remainingAmount > 0 && (
+            <View style={styles.paymentAction}>
+              <Text style={styles.paymentActionTitle}>Complete Payment</Text>
+              <View style={styles.paymentActionInfo}>
+                <Text style={styles.paymentActionAmount}>
+                  {formatCurrency(remainingAmount)}
+                </Text>
+                <Text style={styles.paymentActionDate}>
+                  Remaining balance
+                </Text>
+              </View>
+
+              <Button
+                mode="contained"
+                onPress={() => openPaymentModal('full')}
+                style={[styles.paymentButton, styles.primaryPaymentButton]}
+                icon="credit-card"
+              >
+                Pay Remaining Balance
+              </Button>
+            </View>
+          )}
+
+          {remainingAmount === 0 && (
+            <View style={styles.paymentCompleted}>
+              <Text style={styles.paymentCompletedIcon}>🎉</Text>
+              <Text style={styles.paymentCompletedTitle}>All Payments Completed!</Text>
+              <Text style={styles.paymentCompletedText}>
+                Your project is now fully funded.
+              </Text>
+            </View>
+          )}
         </Card>
       );
     }
@@ -514,7 +799,7 @@ const AgreementDetails = () => {
   return (
     <SafeAreaView style={styles.container}>
       {renderHeader()}
-      
+
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {renderProjectInfo()}
         {renderProgress()}
@@ -522,6 +807,26 @@ const AgreementDetails = () => {
         {renderActions()}
         {renderSummary()}
       </ScrollView>
+
+      {/* Enhanced Payment Modal */}
+      <EnhancedPaymentModal
+        visible={paymentModalVisible}
+        onCancel={handlePaymentCancel}
+        onPaymentSuccess={handlePaymentSuccess}
+        amount={paymentAmount}
+        currency={getAgreementCurrency().toLowerCase()}
+        agreementId={agreementId}
+        title={paymentType === 'next' ? 'Pay Next Installment' : paymentType === 'full' ? 'Pay Full Amount' : 'Complete Payment'}
+        description={
+          paymentType === 'next'
+            ? `Pay the next installment to continue your project.`
+            : paymentType === 'full'
+              ? 'Pay the remaining balance to complete your project.'
+              : 'Complete your payment to proceed.'
+        }
+        agreementData={agreement}
+        paymentType={paymentType}
+      />
     </SafeAreaView>
   );
 };
@@ -834,6 +1139,74 @@ const styles = StyleSheet.create({
   actionButton: {
     backgroundColor: '#015382',
     paddingVertical: 5,
+  },
+
+  // Payment action styles
+  paymentAction: {
+    marginBottom: 20
+  },
+  paymentActionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1f2937',
+    marginBottom: 12
+  },
+  paymentActionInfo: {
+    backgroundColor: '#f8fafc',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: '#e5e7eb'
+  },
+  paymentActionAmount: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#1e3a8a',
+    marginBottom: 4
+  },
+  paymentActionDate: {
+    fontSize: 14,
+    color: '#6b7280'
+  },
+  paymentButtons: {
+    gap: 12
+  },
+  paymentButton: {
+    marginVertical: 4
+  },
+  primaryPaymentButton: {
+    backgroundColor: '#1e3a8a'
+  },
+  secondaryPaymentButton: {
+    borderColor: '#1e3a8a',
+    borderWidth: 2
+  },
+
+  // Payment completed styles
+  paymentCompleted: {
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: '#f0f9ff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#bfdbfe'
+  },
+  paymentCompletedIcon: {
+    fontSize: 48,
+    marginBottom: 12
+  },
+  paymentCompletedTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e3a8a',
+    marginBottom: 8,
+    textAlign: 'center'
+  },
+  paymentCompletedText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center'
   },
   
   // Completed State
