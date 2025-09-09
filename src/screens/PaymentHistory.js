@@ -1,6 +1,6 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Alert,
     Dimensions,
@@ -20,6 +20,7 @@ import {
     Searchbar
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { agreementApi } from '../api/agreement';
 import { paymentApi } from '../api/payment';
 import { useAppLoading } from '../context/AppLoadingContext';
 import { useAuth } from '../context/MobileAuthContext';
@@ -54,54 +55,171 @@ const PaymentHistory = () => {
     filterPayments();
   }, [payments, searchQuery, filterStatus]);
 
+  // 🆕 NEW: Fallback function to fetch payment data from agreements
+  const fetchPaymentsFromAgreements = async () => {
+    try {
+      console.log('📱 [PaymentHistory] Fetching payments from agreements as fallback...');
+      
+      const response = await agreementApi.getAgreements();
+      console.log('📱 [PaymentHistory] Agreements response:', response);
+      
+      const agreements = response.data || response || [];
+      console.log('📱 [PaymentHistory] Agreements data:', agreements);
+      
+      // Extract payment data from agreements
+      const paymentData = [];
+      
+      agreements.forEach(agreement => {
+        if (agreement.installments && agreement.installments.length > 0) {
+          agreement.installments.forEach(installment => {
+            if (installment.isPaid || installment.status === 'paid') {
+              paymentData.push({
+                _id: `payment-${agreement._id}-${installment._id}`,
+                paymentId: installment.stripePaymentIntentId || installment.paystackReference || `PAY-${installment._id}`,
+                amount: installment.amount,
+                status: 'success',
+                createdAt: installment.paidDate || installment.paymentDate || agreement.createdAt,
+                agreement: agreement,
+                project: agreement.projectDetails,
+                writer: agreement.writer,
+                student: agreement.student,
+                gateway: installment.stripePaymentIntentId ? 'stripe' : 'paystack',
+                currency: 'USD',
+                description: `Payment for ${agreement.projectDetails?.title || 'Project'}`
+              });
+            }
+          });
+        }
+      });
+      
+      console.log('📱 [PaymentHistory] Extracted payment data from agreements:', paymentData);
+      return paymentData;
+      
+    } catch (error) {
+      console.error('📱 [PaymentHistory] Error fetching payments from agreements:', error);
+      return [];
+    }
+  };
+
   const fetchPayments = async () => {
     try {
       setLoading(true);
       console.log('📱 [PaymentHistory] Fetching payment history...');
+      console.log('📱 [PaymentHistory] User role:', user?.role);
       
-      const response = await paymentApi.getPaymentHistory();
-      console.log('📱 [PaymentHistory] Raw response:', response);
+      let paymentData = [];
       
-      const paymentData = response.payments || response.data?.payments || response || [];
-      console.log('📱 [PaymentHistory] Payment data:', paymentData);
+      try {
+        // 🔧 FIXED: Enhanced API call with proper parameters
+        const response = await paymentApi.getPaymentHistory({
+          role: user?.role,
+          limit: 100,
+          sort: 'desc'
+        });
+        
+        console.log('📱 [PaymentHistory] Raw response:', response);
+        console.log('📱 [PaymentHistory] Response data:', response.data);
+        
+        // 🔧 FIXED: Better data extraction with multiple fallbacks
+        if (response && response.data) {
+          paymentData = response.data.payments || response.data || [];
+        } else if (Array.isArray(response)) {
+          paymentData = response;
+        } else if (response && response.payments) {
+          paymentData = response.payments;
+        }
+        
+        console.log('📱 [PaymentHistory] Extracted payment data:', paymentData);
+        console.log('📱 [PaymentHistory] Payment data length:', paymentData.length);
+        
+      } catch (paymentApiError) {
+        console.log('📱 [PaymentHistory] Payment API failed, trying fallback method...');
+        console.error('📱 [PaymentHistory] Payment API error:', paymentApiError);
+        
+        // 🆕 FALLBACK: Try to get payment data from agreements
+        paymentData = await fetchPaymentsFromAgreements();
+      }
       
-      const enhancedPayments = paymentData.map(payment => ({
-        ...payment,
-        id: payment._id || payment.id,
-        paymentId: payment.paymentId || payment.reference || payment.id,
-        amount: payment.amount || payment.totalAmount || 0,
-        status: payment.status || 'unknown',
-        timestamp: payment.createdAt || payment.timestamp || payment.date,
-        project: payment.project || payment.agreement?.projectDetails || {
-          title: 'Unknown Project',
-          _id: null
-        },
-        otherParty: user?.role === 'student' 
-          ? (payment.writer || payment.agreement?.writer || { name: 'Unknown Writer' })
-          : (payment.student || payment.agreement?.student || { name: 'Unknown Student' }),
-        receiptUrl: payment.receiptUrl || payment.receipt_url,
-        gateway: payment.gateway || 'unknown'
-      }));
+      // 🔧 FIXED: Enhanced payment data mapping with better fallbacks
+      const enhancedPayments = paymentData.map((payment, index) => {
+        console.log(`📱 [PaymentHistory] Processing payment ${index}:`, payment);
+        
+        return {
+          ...payment,
+          id: payment._id || payment.id || `payment-${index}`,
+          paymentId: payment.paymentId || payment.reference || payment.transactionId || payment.id || `PAY-${index}`,
+          amount: parseFloat(payment.amount || payment.totalAmount || payment.amountPaid || 0),
+          status: payment.status || payment.paymentStatus || 'unknown',
+          timestamp: payment.createdAt || payment.timestamp || payment.date || payment.paymentDate || new Date().toISOString(),
+          project: payment.project || payment.agreement?.projectDetails || payment.agreement || {
+            title: payment.description || payment.projectTitle || 'Unknown Project',
+            _id: payment.agreementId || payment.projectId || null
+          },
+          otherParty: user?.role === 'student' 
+            ? (payment.writer || payment.agreement?.writer || payment.writerInfo || { name: 'Unknown Writer' })
+            : (payment.student || payment.agreement?.student || payment.studentInfo || { name: 'Unknown Student' }),
+          receiptUrl: payment.receiptUrl || payment.receipt_url || payment.receipt,
+          gateway: payment.gateway || payment.paymentGateway || 'unknown',
+          currency: payment.currency || 'USD',
+          description: payment.description || payment.notes || payment.project?.title || 'Payment'
+        };
+      });
+      
+      console.log('📱 [PaymentHistory] Enhanced payments:', enhancedPayments);
       
       setPayments(enhancedPayments);
       
-      // Calculate stats
+      // 🔧 FIXED: Calculate stats with better status mapping
       const totalAmount = enhancedPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
-      const successfulPayments = enhancedPayments.filter(p => p.status === 'success' || p.status === 'completed').length;
-      const pendingPayments = enhancedPayments.filter(p => p.status === 'pending').length;
-      const failedPayments = enhancedPayments.filter(p => p.status === 'failed' || p.status === 'cancelled').length;
+      const successfulPayments = enhancedPayments.filter(p => 
+        ['success', 'completed', 'paid', 'succeeded'].includes(p.status?.toLowerCase())
+      ).length;
+      const pendingPayments = enhancedPayments.filter(p => 
+        ['pending', 'processing', 'in_progress'].includes(p.status?.toLowerCase())
+      ).length;
+      const failedPayments = enhancedPayments.filter(p => 
+        ['failed', 'cancelled', 'declined', 'error'].includes(p.status?.toLowerCase())
+      ).length;
       
-      setStats({
+      const newStats = {
         totalPayments: enhancedPayments.length,
         totalAmount,
         successfulPayments,
         pendingPayments,
         failedPayments
-      });
+      };
+      
+      console.log('📱 [PaymentHistory] Calculated stats:', newStats);
+      setStats(newStats);
       
     } catch (err) {
       console.error('📱 [PaymentHistory] Error fetching payments:', err);
-      Alert.alert('Error', 'Failed to load payment history. Please try again.');
+      console.error('📱 [PaymentHistory] Error details:', err.response?.data || err.message);
+      
+      // 🔧 FIXED: Better error handling with specific error messages
+      let errorMessage = 'Failed to load payment history. Please try again.';
+      
+      if (err.response?.status === 401) {
+        errorMessage = 'Please log in again to view payment history.';
+      } else if (err.response?.status === 403) {
+        errorMessage = 'You do not have permission to view payment history.';
+      } else if (err.response?.status >= 500) {
+        errorMessage = 'Server error. Please try again later.';
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
+      
+      // Set empty state on error
+      setPayments([]);
+      setStats({
+        totalPayments: 0,
+        totalAmount: 0,
+        successfulPayments: 0,
+        pendingPayments: 0,
+        failedPayments: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -137,11 +255,16 @@ const PaymentHistory = () => {
     setRefreshing(false);
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD'
-    }).format(amount || 0);
+  const formatCurrency = (amount, currency = 'USD') => {
+    try {
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency.toUpperCase()
+      }).format(amount || 0);
+    } catch (error) {
+      // Fallback for unsupported currencies
+      return `${currency.toUpperCase()} ${(amount || 0).toFixed(2)}`;
+    }
   };
 
   const formatDate = (timestamp) => {
@@ -193,7 +316,7 @@ const PaymentHistory = () => {
     } else {
       Alert.alert(
         'Payment Details',
-        `Payment ID: ${payment.paymentId}\nAmount: ${formatCurrency(payment.amount)}\nStatus: ${getStatusText(payment.status)}\nDate: ${formatDate(payment.timestamp)}`,
+        `Payment ID: ${payment.paymentId}\nAmount: ${formatCurrency(payment.amount, payment.currency)}\nStatus: ${getStatusText(payment.status)}\nDate: ${formatDate(payment.timestamp)}\nGateway: ${payment.gateway?.toUpperCase() || 'Unknown'}`,
         [{ text: 'OK' }]
       );
     }
@@ -235,7 +358,7 @@ const PaymentHistory = () => {
           </Card>
           
           <Card style={[styles.statCard, styles.amountCard]}>
-            <Text style={styles.statValue}>{formatCurrency(stats.totalAmount)}</Text>
+            <Text style={styles.statValue}>{formatCurrency(stats.totalAmount, 'USD')}</Text>
             <Text style={styles.statLabel}>Total Amount</Text>
           </Card>
         </View>
@@ -311,7 +434,7 @@ const PaymentHistory = () => {
         
         <View style={styles.paymentMeta}>
           <Text style={styles.paymentAmount}>
-            {formatCurrency(payment.amount)}
+            {formatCurrency(payment.amount, payment.currency)}
           </Text>
           <Chip
             style={[styles.statusChip, { backgroundColor: getStatusColor(payment.status) }]}

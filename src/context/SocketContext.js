@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from './MobileAuthContext';
 
@@ -146,6 +146,67 @@ export const SocketProvider = ({ children }) => {
     }
   };
 
+  // WebRTC Call Functions
+  const initiateCall = (targetUserId, chatRoomId) => {
+    if (socket && targetUserId && user) {
+      const callId = `call_${Date.now()}_${user._id}`;
+      // Emit with both legacy and new fields to satisfy server expectations
+      socket.emit('initiateCall', {
+        // New fields
+        to: targetUserId,
+        from: user._id,
+        fromName: user.name,
+        fromAvatar: user.avatar,
+        chatId: chatRoomId,
+        callId,
+        // Legacy fields used by existing client/server handlers
+        recipientId: targetUserId,
+        callerId: user._id,
+        callerName: user.name,
+        callerAvatar: user.avatar,
+      });
+      console.log(`📞 [Socket] Call initiated to ${targetUserId}`);
+      return callId;
+    }
+    return null;
+  };
+
+  const acceptCall = (callId, targetUserId) => {
+    if (socket && callId && targetUserId) {
+      socket.emit('acceptCall', { callId, to: targetUserId, recipientId: targetUserId });
+      console.log(`✅ [Socket] Call accepted: ${callId}`);
+    }
+  };
+
+  const rejectCall = (callId, targetUserId) => {
+    if (socket && callId && targetUserId) {
+      socket.emit('rejectCall', { callId, to: targetUserId, recipientId: targetUserId });
+      console.log(`❌ [Socket] Call rejected: ${callId}`);
+    }
+  };
+
+  const endCall = (callId, targetUserId) => {
+    if (socket && callId && targetUserId) {
+      socket.emit('endCall', { callId, to: targetUserId, recipientId: targetUserId });
+      console.log(`📴 [Socket] Call ended: ${callId}`);
+    }
+  };
+
+  const sendWebRTCSignal = (signal, targetUserId, callId) => {
+    if (socket && signal && targetUserId && callId) {
+      socket.emit('webrtc:signal', {
+        to: targetUserId,
+        from: user._id,
+        callId,
+        signal,
+        // Legacy mirror fields in case server expects different keys
+        recipientId: targetUserId,
+        callerId: user._id,
+      });
+      console.log(`📡 [Socket] WebRTC signal sent: ${signal.type}`);
+    }
+  };
+
   const value = {
     socket,
     isConnected,
@@ -153,7 +214,13 @@ export const SocketProvider = ({ children }) => {
     typingUsers,
     joinChat,
     leaveChat,
-    sendTypingIndicator
+    sendTypingIndicator,
+    // WebRTC Call Functions
+    initiateCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+    sendWebRTCSignal
   };
 
   return (

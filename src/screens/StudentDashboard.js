@@ -346,6 +346,9 @@ const StudentDashboard = () => {
   useEffect(() => {
     fetchData();
     
+    // Check for dashboard refresh flag
+    checkForRefreshFlag();
+    
     // Set up polling for real-time updates since socket may not be available in mobile
     const pollInterval = setInterval(() => {
       // Only poll if the app is in the foreground and user is authenticated
@@ -359,6 +362,35 @@ const StudentDashboard = () => {
       clearInterval(pollInterval);
     };
   }, [fetchData, user?._id]);
+
+  // Check for dashboard refresh flag from payment success
+  const checkForRefreshFlag = async () => {
+    try {
+      const AsyncStorage = require('@react-native-async-storage/async-storage').default;
+      const refreshFlag = await AsyncStorage.getItem('forceRefreshDashboard');
+      
+      if (refreshFlag) {
+        const refreshData = JSON.parse(refreshFlag);
+        console.log('📱 [StudentDashboard] Found refresh flag:', refreshData);
+        
+        // Check if the flag is recent (within last 5 minutes)
+        const isRecent = Date.now() - refreshData.timestamp < 5 * 60 * 1000;
+        
+        if (isRecent) {
+          console.log('📱 [StudentDashboard] Refreshing dashboard due to payment success...');
+          await fetchData(true);
+          
+          // Clear the flag after refreshing
+          await AsyncStorage.removeItem('forceRefreshDashboard');
+        } else {
+          // Remove old flag
+          await AsyncStorage.removeItem('forceRefreshDashboard');
+        }
+      }
+    } catch (error) {
+      console.error('📱 [StudentDashboard] Error checking refresh flag:', error);
+    }
+  };
 
   const onRefresh = useCallback(() => {
     fetchData(true);

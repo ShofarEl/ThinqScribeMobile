@@ -2,21 +2,21 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-  Alert,
-  Dimensions,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
+    Alert,
+    Dimensions,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import {
-  ActivityIndicator,
-  Avatar,
-  Button,
-  Card,
-  Chip,
-  ProgressBar
+    ActivityIndicator,
+    Avatar,
+    Button,
+    Card,
+    Chip,
+    ProgressBar
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { agreementApi } from '../api/agreement';
@@ -203,25 +203,6 @@ const AgreementDetails = () => {
 
       setPaymentModalVisible(false);
 
-      // 🔧 FIXED: Set dashboard refresh flag immediately for reliable refresh
-      try {
-        const AsyncStorage = require('@react-native-async-storage/async-storage').default;
-        await AsyncStorage.setItem('forceRefreshDashboard', JSON.stringify({
-          timestamp: Date.now(),
-          reason: 'payment_success',
-          agreementId: agreementId,
-          paymentData: {
-            amount: paymentData.amount,
-            currency: paymentData.currency,
-            gateway: paymentData.gateway,
-            reference: paymentData.reference
-          }
-        }));
-        console.log('💳 [AgreementDetails] Dashboard refresh flag set after payment success');
-      } catch (error) {
-        console.error('💳 [AgreementDetails] Failed to set dashboard refresh flag:', error);
-      }
-
       Alert.alert(
         'Payment Successful',
         `Your payment has been processed successfully via ${paymentData.gateway}.`,
@@ -230,17 +211,14 @@ const AgreementDetails = () => {
         ]
       );
 
-      // Navigate to payment success screen with all payment data
+      // Navigate to payment success screen
       router.push({
         pathname: '/payment-success',
         params: {
           agreementId: agreementId,
           amount: paymentData.amount,
           currency: paymentData.currency,
-          gateway: paymentData.gateway,
-          reference: paymentData.reference || paymentData.sessionId || 'unknown',
-          status: 'success',
-          verified: paymentData.verified ? 'true' : 'false'
+          gateway: paymentData.gateway
         }
       });
 

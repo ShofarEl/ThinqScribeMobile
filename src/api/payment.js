@@ -59,10 +59,32 @@ export const paymentApi = {
   // Get payment history
   getPaymentHistory: async (params = {}) => {
     try {
-      const response = await client.get('/payment/history', { params });
+      console.log('💳 [PaymentAPI] Fetching payment history with params:', params);
+      
+      // 🔧 FIXED: Enhanced API call with better error handling
+      const response = await client.get('/payment/history', { 
+        params: {
+          ...params,
+          include: 'agreement,writer,student',
+          populate: 'agreement.projectDetails'
+        }
+      });
+      
+      console.log('💳 [PaymentAPI] Payment history response:', response);
+      console.log('💳 [PaymentAPI] Response data:', response.data);
+      
       return response;
     } catch (error) {
-      console.error('Error fetching payment history:', error);
+      console.error('💳 [PaymentAPI] Error fetching payment history:', error);
+      console.error('💳 [PaymentAPI] Error response:', error.response?.data);
+      
+      // 🔧 FIXED: Better error handling with fallback
+      if (error.response?.status === 404) {
+        // Endpoint might not exist, return empty data
+        console.log('💳 [PaymentAPI] Payment history endpoint not found, returning empty data');
+        return { data: { payments: [] } };
+      }
+      
       throw error;
     }
   },

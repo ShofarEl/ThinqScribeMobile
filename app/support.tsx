@@ -1,13 +1,14 @@
 // Support Screen for ThinqScribe Mobile
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React, { useState } from 'react';
-import { Alert, Linking, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Button, Card, Chip, IconButton, TextInput } from 'react-native-paper';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Dimensions, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Button, Card, Chip, TextInput } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/MobileAuthContext';
+
+const { width, height } = Dimensions.get('window');
 
 const SupportScreen: React.FC = () => {
   const { user } = useAuth();
@@ -15,6 +16,23 @@ const SupportScreen: React.FC = () => {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
 
   const categories = [
     { id: 'technical', label: 'Technical Issue', icon: '⚙️' },
@@ -47,27 +65,35 @@ const SupportScreen: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      // Create email with subject and message
+      const emailSubject = encodeURIComponent(`${selectedCategory}: ${subject}`);
+      const emailBody = encodeURIComponent(`Category: ${selectedCategory}\n\nMessage:\n${message}`);
+
+      const mailtoUrl = `mailto:business@thinqscribe.com?subject=${emailSubject}&body=${emailBody}`;
+
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+      // Open email app with pre-filled content
+      await Linking.openURL(mailtoUrl);
+
       Alert.alert(
-        'Ticket Submitted',
-        'Your support ticket has been submitted. We\'ll get back to you within 24 hours.',
+        'Email Opened',
+        'Your email app has been opened with your support ticket details. Please send the email to submit your ticket.',
         [{ text: 'OK', onPress: () => router.back() }]
       );
     } catch (error) {
-      Alert.alert('Error', 'Failed to submit ticket. Please try again.');
+      Alert.alert('Error', 'Failed to open email app. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleEmailSupport = () => {
-    Linking.openURL('mailto:support@thinqscribe.com?subject=Mobile App Support');
+    Linking.openURL('mailto:business@thinqscribe.com?subject=Mobile App Support');
   };
 
   const handleCallSupport = () => {
-    Linking.openURL('tel:+1234567890');
+    Linking.openURL('tel:+2348111161612');
   };
 
   const renderQuickContact = () => (
@@ -160,53 +186,50 @@ const SupportScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
-      
-      <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-        <View style={styles.headerContent}>
-          <IconButton icon="arrow-left" iconColor="#ffffff" onPress={() => router.back()} />
-          <View style={styles.headerTextContainer}>
-            <Text style={styles.headerTitle}>Help & Support</Text>
-            <Text style={styles.headerSubtitle}>We're here to help you</Text>
-          </View>
-        </View>
-      </LinearGradient>
+      <StatusBar style="dark" />
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <Animated.ScrollView
+        style={[
+          styles.content,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim.interpolate({
+              inputRange: [0, 50],
+              outputRange: [0, 20],
+            }) }]
+          }
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
         {renderQuickContact()}
         {renderTicketForm()}
         {renderFAQ()}
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { paddingVertical: 20 },
-  headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
-  headerTextContainer: { flex: 1, marginLeft: 12 },
-  headerTitle: { fontSize: 24, fontWeight: 'bold', color: '#ffffff' },
-  headerSubtitle: { fontSize: 14, color: 'rgba(255, 255, 255, 0.8)', marginTop: 4 },
-  content: { flex: 1, padding: 16 },
+  container: { flex: 1, backgroundColor: '#f8fafc' },
+  content: { flex: 1, paddingHorizontal: 20, paddingTop: 20 },
   sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 16, color: '#333' },
-  contactCard: { marginBottom: 20, borderRadius: 12 },
+  contactCard: { marginBottom: 20, borderRadius: 20, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, overflow: 'hidden' },
   contactButtons: { flexDirection: 'row', justifyContent: 'space-around' },
   contactButton: { alignItems: 'center', padding: 16, flex: 1 },
   contactIcon: { fontSize: 32, marginBottom: 8 },
-  contactLabel: { fontSize: 14, fontWeight: '500', color: '#667eea' },
-  formCard: { marginBottom: 20, borderRadius: 12 },
+  contactLabel: { fontSize: 14, fontWeight: '500', color: '#153862' },
+  formCard: { marginBottom: 20, borderRadius: 20, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, overflow: 'hidden' },
   categoryContainer: { marginBottom: 16 },
   inputLabel: { fontSize: 14, fontWeight: '500', marginBottom: 8, color: '#333' },
   categoryChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   categoryChip: { backgroundColor: '#f0f0f0', marginBottom: 8 },
-  selectedCategoryChip: { backgroundColor: '#667eea' },
+  selectedCategoryChip: { backgroundColor: '#153862' },
   categoryChipText: { fontSize: 12 },
   selectedCategoryChipText: { color: '#ffffff' },
   input: { marginBottom: 16 },
   textArea: { marginBottom: 16, minHeight: 100 },
-  submitButton: { backgroundColor: '#667eea', marginTop: 8 },
-  faqCard: { borderRadius: 12 },
+  submitButton: { backgroundColor: '#153862', marginTop: 8 },
+  faqCard: { borderRadius: 20, elevation: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 8, overflow: 'hidden' },
   faqItem: { marginBottom: 16, paddingBottom: 16, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' },
   faqQuestion: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#333' },
   faqAnswer: { fontSize: 14, color: '#666', lineHeight: 20 },

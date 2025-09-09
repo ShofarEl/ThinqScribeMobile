@@ -53,6 +53,11 @@ export const theme = {
       fontFamily: typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,
     },
+    // Add missing MD3-compatible variant to prevent runtime errors when components request it
+    bodyMedium: {
+      fontFamily: typography.fonts.body.fontFamily,
+      fontWeight: typography.fonts.body.fontWeight,
+    },
     bodySmall: {
       fontFamily: typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,

@@ -128,7 +128,13 @@ export const agreementApi = {
           amount,
           currency,
           gateway,
-          paymentMethod
+          paymentMethod,
+          // 🔧 FIXED: Add mobile-specific callback URLs
+          successUrl: 'thinqscribe://payment-success',
+          cancelUrl: 'thinqscribe://payment-failed',
+          // Also include web fallback URLs
+          webSuccessUrl: 'https://thinqscribe.com/payment-success',
+          webCancelUrl: 'https://thinqscribe.com/payment-failed'
         })
       });
       return response;

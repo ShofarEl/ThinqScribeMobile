@@ -6,7 +6,6 @@ export type ThemedTextProps = TextProps & {
   lightColor?: string;
   darkColor?: string;
   type?: 'default' | 'title' | 'defaultSemiBold' | 'subtitle' | 'link';
-  variant?: string;
 };
 
 export function ThemedText({
@@ -14,40 +13,9 @@ export function ThemedText({
   lightColor,
   darkColor,
   type = 'default',
-  variant,
   ...rest
 }: ThemedTextProps) {
   const color = useThemeColor({ light: lightColor, dark: darkColor }, 'text');
-
-  // Handle variant prop (for react-native-paper compatibility)
-  const getVariantStyles = () => {
-    if (!variant) return {};
-
-    switch (variant) {
-      case 'bodyMedium':
-        return { fontSize: 14, lineHeight: 20 };
-      case 'bodySmall':
-        return { fontSize: 12, lineHeight: 16 };
-      case 'bodyLarge':
-        return { fontSize: 16, lineHeight: 24 };
-      case 'label':
-        return { fontSize: 14, fontWeight: '500' };
-      case 'labelLarge':
-        return { fontSize: 16, fontWeight: '500' };
-      case 'caption':
-        return { fontSize: 12, lineHeight: 16, color: '#6B7280' };
-      case 'error':
-        return { fontSize: 14, color: '#EF4444' };
-      case 'button':
-        return { fontSize: 14, fontWeight: '500' };
-      case 'buttonSmall':
-        return { fontSize: 12, fontWeight: '500' };
-      case 'buttonLarge':
-        return { fontSize: 16, fontWeight: '500' };
-      default:
-        return {};
-    }
-  };
 
   return (
     <Text
@@ -58,7 +26,6 @@ export function ThemedText({
         type === 'defaultSemiBold' ? styles.defaultSemiBold : undefined,
         type === 'subtitle' ? styles.subtitle : undefined,
         type === 'link' ? styles.link : undefined,
-        getVariantStyles(),
         style,
       ]}
       {...rest}

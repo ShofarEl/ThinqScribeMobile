@@ -44,11 +44,19 @@ const ProfileScreen = () => {
         {/* Profile Header */}
         <Card style={styles.profileCard}>
           <Card.Content style={styles.profileContent}>
-            <Avatar.Text 
-              size={80} 
-              label={user?.name?.charAt(0) || 'U'} 
-              style={styles.avatar}
-            />
+            {user?.avatar ? (
+              <Avatar.Image 
+                size={80} 
+                source={{ uri: user.avatar }} 
+                style={styles.avatar}
+              />
+            ) : (
+              <Avatar.Text 
+                size={80} 
+                label={user?.name?.charAt(0) || 'U'} 
+                style={styles.avatar}
+              />
+            )}
             <Text style={styles.userName}>{user?.name || 'User'}</Text>
             <Text style={styles.userEmail}>{user?.email || 'user@example.com'}</Text>
             <Text style={styles.userRole}>
@@ -140,7 +148,12 @@ const styles = StyleSheet.create({
   },
   profileCard: {
     marginBottom: 24,
-    elevation: 2,
+    elevation: 4,
+    borderRadius: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
   },
   profileContent: {
     alignItems: 'center',
@@ -149,6 +162,11 @@ const styles = StyleSheet.create({
   avatar: {
     backgroundColor: '#015382',
     marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   userName: {
     fontSize: 24,
@@ -172,16 +190,23 @@ const styles = StyleSheet.create({
   },
   optionsContainer: {
     backgroundColor: 'white',
-    borderRadius: 12,
-    elevation: 2,
+    borderRadius: 16,
+    elevation: 3,
     marginBottom: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
   },
   option: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
+    padding: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#f3f4f6',
+    borderRadius: 8,
+    marginHorizontal: 4,
+    marginVertical: 2,
   },
   optionText: {
     flex: 1,

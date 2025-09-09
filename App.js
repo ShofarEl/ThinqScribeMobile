@@ -1,6 +1,7 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Provider as PaperProvider } from 'react-native-paper';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppLoader from './src/components/AppLoader';
@@ -20,10 +21,12 @@ const AppNavigationContainer = () => {
   }
 
   return (
-    <NavigationContainer>
-      {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
-      <StatusBar style="auto" />
-    </NavigationContainer>
+    <GestureHandlerRootView style={{ flex: 1 }} enable={true}>
+      <NavigationContainer>
+        {isAuthenticated ? <MainNavigator /> : <AuthNavigator />}
+        <StatusBar style="auto" />
+      </NavigationContainer>
+    </GestureHandlerRootView>
   );
 };
 

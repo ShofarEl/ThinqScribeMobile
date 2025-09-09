@@ -6,35 +6,35 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  Alert,
-  Animated,
-  Dimensions,
-  FlatList,
-  Image,
-  Keyboard,
-  KeyboardAvoidingView,
-  Linking,
-  Modal,
-  Platform,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Alert,
+    Animated,
+    Dimensions,
+    FlatList,
+    Image,
+    Keyboard,
+    KeyboardAvoidingView,
+    Linking,
+    Modal,
+    Platform,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import {
-  ActivityIndicator,
-  Avatar,
-  Badge,
-  Button,
-  Chip,
-  Menu,
-  Provider as PaperProvider,
-  Portal,
-  Searchbar,
-  Snackbar
+    ActivityIndicator,
+    Avatar,
+    Badge,
+    Button,
+    Chip,
+    Menu,
+    Provider as PaperProvider,
+    Portal,
+    Searchbar,
+    Snackbar
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -538,6 +538,23 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: 4,
   },
+  textInputContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    maxHeight: 120,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  recordingTime: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
   attachButton: {
     width: 32,
     height: 32,
@@ -711,6 +728,121 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   
+  // Main View Styles
+  mainContainer: {
+    flex: 1,
+  },
+  mainHeader: {
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    alignItems: 'center',
+  },
+  mainTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: 'white',
+    marginBottom: 5,
+  },
+  mainSubtitle: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+  },
+  tabsContainer: {
+    flexDirection: 'row',
+    backgroundColor: 'white',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderBottomWidth: 2,
+    borderBottomColor: 'transparent',
+  },
+  activeTab: {
+    borderBottomColor: '#015382',
+  },
+  tabText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  activeTabText: {
+    color: '#015382',
+  },
+  listContainer: {
+    flex: 1,
+    backgroundColor: 'white',
+  },
+  list: {
+    flex: 1,
+  },
+  
+  // Agreement Styles
+  agreementsList: {
+    padding: 15,
+  },
+  agreementCard: {
+    marginBottom: 15,
+    borderRadius: 12,
+    elevation: 2,
+    backgroundColor: 'white',
+    padding: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+  },
+  agreementHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 10,
+  },
+  agreementInfo: {
+    flex: 1,
+    marginRight: 10,
+  },
+  agreementTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e293b',
+    marginBottom: 5,
+  },
+  agreementWriter: {
+    fontSize: 14,
+    color: '#64748b',
+    marginBottom: 5,
+  },
+  agreementAmount: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#015382',
+  },
+  statusChip: {
+    borderRadius: 20,
+  },
+  statusChipText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  agreementDeadline: {
+    fontSize: 12,
+    color: '#f59e0b',
+    marginBottom: 10,
+    fontWeight: '500',
+  },
+  agreementActions: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  viewButton: {
+    borderColor: '#015382',
+    flex: 1,
+  },
+  
   // Empty states
   emptyMessages: {
     flex: 1,
@@ -730,19 +862,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 40,
   },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 20,
+  },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#374151',
-    marginBottom: 8,
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginBottom: 10,
     textAlign: 'center',
   },
   emptyText: {
-    fontSize: 14,
-    color: '#6B7280',
+    fontSize: 16,
+    color: '#64748b',
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 20,
+    lineHeight: 22,
+    marginBottom: 25,
   },
   findWritersButton: {
     backgroundColor: '#015382',
@@ -758,6 +894,112 @@ const styles = StyleSheet.create({
     backgroundColor: '#374151',
     borderRadius: 8,
   },
+  
+  // Audio Call Styles
+  callContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#1F2937',
+    zIndex: 1000,
+  },
+  callHeader: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  callInfo: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  callDetails: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  callName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: 'white',
+    marginBottom: 8,
+  },
+  callStatus: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
+  },
+  callQuality: {
+    fontSize: 14,
+    color: '#F59E0B',
+    fontWeight: '500',
+  },
+  callControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    gap: 30,
+  },
+  callControlButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  callControlButtonActive: {
+    backgroundColor: '#3B82F6',
+  },
+  acceptButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  rejectButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  endCallButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  closeCallButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
 });
 
 const StudentChat = () => {
@@ -767,10 +1009,16 @@ const StudentChat = () => {
   const { setLoading: setGlobalLoading } = useAppLoading();
   const { socket, joinChat, leaveChat } = useSocket() || {};
 
+  // Debug log to confirm component is loading
+  console.log('🎯 [StudentChat] Component loaded with audio call functionality!');
+  console.log('🎯 [StudentChat] User role:', user?.role);
+  console.log('🎯 [StudentChat] Chat ID:', chatId);
+
   // State
   const [messages, setMessages] = useState([]);
   const [chats, setChats] = useState([]);
   const [filteredChats, setFilteredChats] = useState([]);
+  const [agreements, setAgreements] = useState([]);
   const [currentChat, setCurrentChat] = useState(null);
   const [selectedWriter, setSelectedWriter] = useState(null);
   const [messageText, setMessageText] = useState('');
@@ -780,6 +1028,7 @@ const StudentChat = () => {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [showChatList, setShowChatList] = useState(!chatId);
+  const [activeTab, setActiveTab] = useState('chats'); // 'chats' or 'agreements'
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [typingUsers, setTypingUsers] = useState(new Set());
   const [otherUserTyping, setOtherUserTyping] = useState(false);
@@ -796,11 +1045,26 @@ const StudentChat = () => {
   const [menuVisible, setMenuVisible] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [playingAudioId, setPlayingAudioId] = useState(null);
+  const [currentSound, setCurrentSound] = useState(null);
 
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
   const [recording, setRecording] = useState(null);
   const [recordingDuration, setRecordingDuration] = useState(0);
+
+  // Audio Call States
+  const [callState, setCallState] = useState('idle'); // 'idle', 'calling', 'ringing', 'connected', 'ended', 'failed'
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [outgoingCall, setOutgoingCall] = useState(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const [callStartTime, setCallStartTime] = useState(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [callQuality, setCallQuality] = useState('good'); // 'excellent', 'good', 'fair', 'poor'
+  const [callTimer, setCallTimer] = useState(null);
+  const [ringtoneSound, setRingtoneSound] = useState(null);
+  const [callSound, setCallSound] = useState(null);
 
   // Modal states
   const [showCreateAgreementModal, setShowCreateAgreementModal] = useState(false);
@@ -818,6 +1082,7 @@ const StudentChat = () => {
     StatusBar.setBarStyle('light-content', true);
     requestPermissions();
     fetchChats();
+    fetchAgreements();
     
     if (chatId) {
       fetchMessages(chatId);
@@ -920,41 +1185,58 @@ const StudentChat = () => {
     };
 
     const handleIncomingCall = (callData) => {
-      if (callData.receiverId === user._id) {
-        Alert.alert(
-          'Incoming Call',
-          `${callData.callerName} is calling you`,
-          [
-            {
-              text: 'Decline',
-              style: 'cancel',
-              onPress: () => {
-                socket.emit('rejectCall', {
-                  chatId: callData.chatId,
-                  callerId: callData.callerId,
-                  receiverId: user._id
-                });
-              }
-            },
-            {
-              text: 'Answer',
-              onPress: () => {
-                router.push({
-                  pathname: '/audio-call',
-                  params: {
-                    userId: callData.callerId,
-                    userName: callData.callerName,
-                    userAvatar: callData.callerAvatar,
-                    isIncoming: 'true',
-                    chatId: callData.chatId
-                  }
-                });
-              }
-            }
-          ],
-          { cancelable: false }
-        );
-      }
+      console.log('📞 [StudentChat] Incoming call:', callData);
+      
+      // Navigate to incoming call screen
+      router.push({
+        pathname: '/audio-call',
+        params: {
+          userId: callData.from,
+          userName: callData.fromName,
+          userAvatar: callData.fromAvatar,
+          isIncoming: 'true',
+          chatId: callData.chatId,
+          callId: callData.callId
+        }
+      });
+    };
+
+    const handleCallAccepted = (callData) => {
+      console.log('📞 [StudentChat] Call accepted:', callData);
+      setCallState('connected');
+      setCallStartTime(Date.now());
+      stopRingtone();
+      startCallTimer();
+    };
+
+    const handleCallRejected = (callData) => {
+      console.log('📞 [StudentChat] Call rejected:', callData);
+      setCallState('idle');
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      stopRingtone();
+    };
+
+    const handleCallEnded = (callData) => {
+      console.log('📞 [StudentChat] Call ended:', callData);
+      setCallState('idle');
+      setCallDuration(0);
+      setCallStartTime(null);
+      stopCallTimer();
+      stopRingtone();
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      setIsMuted(false);
+      setIsSpeakerOn(false);
+    };
+
+    const handleCallFailed = (callData) => {
+      console.log('📞 [StudentChat] Call failed:', callData);
+      setCallState('failed');
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      stopRingtone();
+      showSnackbar('Call failed');
     };
 
     const handleMessagesRead = ({ chatId: cId, readBy }) => {
@@ -975,6 +1257,10 @@ const StudentChat = () => {
     socket.on('userOffline', handleUserOffline);
     socket.on('messagesRead', handleMessagesRead);
     socket.on('incomingCall', handleIncomingCall);
+    socket.on('callAccepted', handleCallAccepted);
+    socket.on('callRejected', handleCallRejected);
+    socket.on('callEnded', handleCallEnded);
+    socket.on('callFailed', handleCallFailed);
 
     return () => {
       socket.off('messageBroadcast', handleReceiveMessage);
@@ -987,6 +1273,10 @@ const StudentChat = () => {
       socket.off('userOffline', handleUserOffline);
       socket.off('messagesRead', handleMessagesRead);
       socket.off('incomingCall', handleIncomingCall);
+      socket.off('callAccepted', handleCallAccepted);
+      socket.off('callRejected', handleCallRejected);
+      socket.off('callEnded', handleCallEnded);
+      socket.off('callFailed', handleCallFailed);
     };
   }, [socket, user?._id, currentChat]);
 
@@ -1068,6 +1358,29 @@ const StudentChat = () => {
       showSnackbar('Failed to load chats');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchAgreements = async () => {
+    try {
+      console.log('📱 [StudentChat] Fetching agreements...');
+      const agreementsData = await agreementApi.getAgreements();
+      console.log('📱 [StudentChat] Agreements data:', agreementsData);
+      
+      const enhancedAgreements = (agreementsData || []).map(agreement => ({
+        ...agreement,
+        id: agreement._id,
+        title: agreement.projectDetails?.title || 'Untitled Project',
+        amount: agreement.totalAmount || 0,
+        deadline: agreement.projectDetails?.deadline,
+        writerName: agreement.writer?.name || 'Unknown Writer',
+        writerAvatar: agreement.writer?.avatar,
+        status: agreement.status || 'pending'
+      }));
+      
+      setAgreements(enhancedAgreements);
+    } catch (err) {
+      console.error('📱 [StudentChat] Error fetching agreements:', err);
     }
   };
 
@@ -1334,10 +1647,16 @@ const StudentChat = () => {
     if (joinChat) joinChat(chat.id);
   };
 
-  const scrollToBottom = (animated = false) => {
+  const scrollToBottom = (animated = true) => {
     if (flatListRef.current && messages.length > 0) {
       setTimeout(() => {
-        flatListRef.current.scrollToEnd({ animated });
+        try {
+          if (flatListRef.current) {
+            flatListRef.current.scrollToEnd({ animated });
+          }
+        } catch (error) {
+          console.warn('Failed to scroll to bottom:', error);
+        }
       }, animated ? 100 : 50);
     }
   };
@@ -1430,7 +1749,8 @@ const StudentChat = () => {
   };
 
   // Audio call functionality
-  const initiateCall = () => {
+  const initiateCall = async () => {
+    try {
     if (!currentChat?.otherParticipant) {
       showSnackbar('Unable to start call');
       return;
@@ -1438,53 +1758,202 @@ const StudentChat = () => {
 
     const otherUser = currentChat.otherParticipant;
     
-    // Check if user is online
-    if (!onlineUsers.has(otherUser._id)) {
-      Alert.alert(
-        'User Offline',
-        'The user is currently offline. The call may not connect.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Call Anyway', 
-            onPress: () => startCall(otherUser)
-          }
-        ]
-      );
-      return;
-    }
-
-    startCall(otherUser);
-  };
-
-  const startCall = (otherUser) => {
-    // Emit call initiation to socket
-    if (socket && currentChat) {
-      socket.emit('initiateCall', {
-        chatId: currentChat.id,
-        callerId: user._id,
-        callerName: user.name,
-        callerAvatar: user.avatar,
-        receiverId: otherUser._id,
-        receiverName: otherUser.name,
-        receiverAvatar: otherUser.avatar,
-        callType: 'audio'
-      });
-
-      // Navigate to call screen
+      console.log('📞 [StudentChat] Initiating call to:', otherUser.name);
+      
+      const hasPermissions = await requestCallPermissions();
+      if (!hasPermissions) return;
+      
+      const callId = `call_${Date.now()}_${user._id}`;
+      
+      // Navigate to WebRTC audio call screen
       router.push({
         pathname: '/audio-call',
         params: {
-          userId: otherUser._id,
+          userId: otherUser._id || otherUser.id,
           userName: otherUser.name,
           userAvatar: otherUser.avatar,
           isIncoming: 'false',
-          chatId: currentChat.id
+          chatId: currentChat?.id,
+          callId
         }
       });
-    } else {
-      showSnackbar('Unable to start call - connection error');
+      
+      showSnackbar(`Calling ${otherUser.name}...`);
+    } catch (error) {
+      console.error('❌ [StudentChat] Call initiation error:', error);
+      setCallState('failed');
+      Alert.alert('Call Failed', 'Unable to initiate call. Please try again.');
     }
+  };
+
+  // Audio Call Functions
+  const requestCallPermissions = async () => {
+    try {
+      console.log('📞 [StudentChat] Requesting call permissions...');
+      
+      // Request microphone permission
+      const { status: micStatus } = await Audio.requestPermissionsAsync();
+      if (micStatus !== 'granted') {
+        throw new Error('Microphone permission denied');
+      }
+      
+      // Set audio mode for calls
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: true
+      });
+      
+      console.log('✅ [StudentChat] Call permissions granted');
+      return true;
+    } catch (error) {
+      console.error('❌ [StudentChat] Call permissions error:', error);
+      Alert.alert('Permission Required', 'Microphone access is required for audio calls.');
+      return false;
+    }
+  };
+
+  const playRingtone = async () => {
+    try {
+      if (ringtoneSound) {
+        await ringtoneSound.unloadAsync();
+      }
+      
+      // Use a simple ringtone sound (you can replace with actual ringtone file)
+      const { sound } = await Audio.Sound.createAsync(
+        require('../../assets/live-the-moment-67986.mp3'), // Using existing audio file
+        { shouldPlay: true, isLooping: true, volume: 0.5 }
+      );
+      
+      setRingtoneSound(sound);
+    } catch (error) {
+      console.error('❌ [StudentChat] Ringtone error:', error);
+    }
+  };
+
+  const stopRingtone = async () => {
+    try {
+      if (ringtoneSound) {
+        await ringtoneSound.unloadAsync();
+        setRingtoneSound(null);
+      }
+    } catch (error) {
+      console.error('❌ [StudentChat] Stop ringtone error:', error);
+    }
+  };
+
+  const startCallTimer = () => {
+    const timer = setInterval(() => {
+      if (callStartTime) {
+        const duration = Math.floor((Date.now() - callStartTime) / 1000);
+        setCallDuration(duration);
+      }
+    }, 1000);
+    setCallTimer(timer);
+  };
+
+  const stopCallTimer = () => {
+    if (callTimer) {
+      clearInterval(callTimer);
+      setCallTimer(null);
+    }
+  };
+
+  const acceptCall = async () => {
+    try {
+      console.log('📞 [StudentChat] Accepting call...');
+      
+      const hasPermissions = await requestCallPermissions();
+      if (!hasPermissions) return;
+      
+      setCallState('connected');
+      setCallStartTime(Date.now());
+      stopRingtone();
+      startCallTimer();
+      
+      // Emit call accepted event
+      if (socket && incomingCall) {
+        socket.emit('callAccepted', {
+          callId: incomingCall.id,
+          recipientId: user._id
+        });
+      }
+      
+      showSnackbar('Call connected');
+    } catch (error) {
+      console.error('❌ [StudentChat] Call accept error:', error);
+      setCallState('failed');
+      Alert.alert('Call Failed', 'Unable to accept call. Please try again.');
+    }
+  };
+
+  const rejectCall = () => {
+    try {
+      console.log('📞 [StudentChat] Rejecting call...');
+      
+      setCallState('idle');
+      stopRingtone();
+      
+      // Emit call rejected event
+      if (socket && incomingCall) {
+        socket.emit('callRejected', {
+          callId: incomingCall.id,
+          recipientId: user._id
+        });
+      }
+      
+      setIncomingCall(null);
+      showSnackbar('Call rejected');
+    } catch (error) {
+      console.error('❌ [StudentChat] Call reject error:', error);
+    }
+  };
+
+  const endCall = () => {
+    try {
+      console.log('📞 [StudentChat] Ending call...');
+      
+      setCallState('idle');
+      setCallDuration(0);
+      setCallStartTime(null);
+      stopCallTimer();
+      stopRingtone();
+      
+      // Emit call ended event
+      if (socket) {
+        socket.emit('callEnded', {
+          callId: incomingCall?.id || outgoingCall?.id,
+          userId: user._id
+        });
+      }
+      
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      setIsMuted(false);
+      setIsSpeakerOn(false);
+      
+      showSnackbar('Call ended');
+    } catch (error) {
+      console.error('❌ [StudentChat] Call end error:', error);
+    }
+  };
+
+  const toggleMute = () => {
+    setIsMuted(prev => !prev);
+    showSnackbar(isMuted ? 'Microphone unmuted' : 'Microphone muted');
+  };
+
+  const toggleSpeaker = () => {
+    setIsSpeakerOn(prev => !prev);
+    showSnackbar(isSpeakerOn ? 'Speaker off' : 'Speaker on');
+  };
+
+  const formatCallDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
   // File handling utility functions
@@ -1581,13 +2050,28 @@ const StudentChat = () => {
     }
   };
 
-  const handleAudioPlay = async (audioUrl) => {
+  const handleAudioPlay = async (audioUrl, messageId) => {
     try {
-      console.log('🎵 [StudentChat] Playing audio:', audioUrl);
+      console.log('🎵 [StudentChat] Audio action for:', audioUrl, messageId);
       
       if (!audioUrl) {
         showSnackbar('Audio URL not available');
         return;
+      }
+
+      // If currently playing this audio, pause it
+      if (playingAudioId === messageId && currentSound) {
+        await currentSound.pauseAsync();
+        setPlayingAudioId(null);
+        setCurrentSound(null);
+        showSnackbar('Audio paused');
+        return;
+      }
+
+      // If playing another audio, stop it first
+      if (currentSound) {
+        await currentSound.stopAsync();
+        await currentSound.unloadAsync();
       }
       
       // Set audio mode for playback
@@ -1612,21 +2096,30 @@ const StudentChat = () => {
         }
       );
       
+      setCurrentSound(sound);
+      setPlayingAudioId(messageId);
+      
       // Track when audio finishes
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.didJustFinish) {
           sound.unloadAsync();
+          setPlayingAudioId(null);
+          setCurrentSound(null);
           console.log('🎵 [StudentChat] Audio playback finished');
         }
         if (status.error) {
           console.error('❌ [StudentChat] Audio playback error:', status.error);
           sound.unloadAsync();
+          setPlayingAudioId(null);
+          setCurrentSound(null);
         }
       });
       
       showSnackbar('Playing voice message');
     } catch (error) {
       console.error('❌ [StudentChat] Audio playback failed:', error);
+      setPlayingAudioId(null);
+      setCurrentSound(null);
       
       // Fallback: try to open audio URL directly
       try {
@@ -1665,6 +2158,56 @@ const StudentChat = () => {
       return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     } catch (error) {
       return 'Now';
+    }
+  };
+
+  const formatCurrency = (amount, agreement = null) => {
+    // Detect currency from agreement if available
+    let currency = 'USD';
+
+    if (agreement?.paymentPreferences) {
+      const prefs = agreement.paymentPreferences;
+
+      // Check for explicit currency setting
+      if (prefs.currency === 'ngn') {
+        currency = 'NGN';
+      }
+      // Check for Paystack gateway (typically NGN)
+      else if (prefs.gateway === 'paystack') {
+        currency = 'NGN';
+      }
+      // Check for native amount indicators
+      else if (prefs.nativeAmount && prefs.nativeAmount !== agreement.totalAmount && prefs.exchangeRate === 1) {
+        currency = 'NGN';
+      }
+      else if (prefs.nativeAmount && prefs.nativeAmount > 5000) {
+        currency = 'NGN';
+      }
+      // Default to explicit currency or USD
+      else {
+        currency = (prefs.currency || 'USD').toUpperCase();
+      }
+    }
+
+    console.log('💵 [StudentChat] Formatting currency:', {
+      amount,
+      currency,
+      agreementId: agreement?._id
+    });
+
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency
+    }).format(amount);
+  };
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'pending': return '#f59e0b';
+      case 'active': return '#10b981';
+      case 'completed': return '#6366f1';
+      case 'disputed': return '#ef4444';
+      default: return '#64748b';
     }
   };
 
@@ -1934,9 +2477,13 @@ const StudentChat = () => {
                     />
                   </TouchableOpacity>
                 ) : message.fileType?.startsWith('audio/') ? (
-                  <TouchableOpacity style={styles.audioContainer} onPress={() => handleAudioPlay(message.fileUrl)}>
-                    <TouchableOpacity style={styles.audioButton} onPress={() => handleAudioPlay(message.fileUrl)}>
-                      <Icon name="play" size={20} color="white" />
+                <TouchableOpacity style={styles.audioContainer} onPress={() => handleAudioPlay(message.fileUrl, message.id)}>
+                  <TouchableOpacity style={styles.audioButton} onPress={() => handleAudioPlay(message.fileUrl, message.id)}>
+                    <Icon 
+                      name={playingAudioId === message.id ? "pause" : "play"} 
+                      size={16} 
+                      color="white" 
+                    />
                     </TouchableOpacity>
                     <View style={styles.audioInfo}>
                       <Text style={[styles.audioText, { color: 'white' }]}>
@@ -1949,7 +2496,7 @@ const StudentChat = () => {
                       )}
                     </View>
                     <TouchableOpacity style={styles.downloadButton} onPress={() => handleFileDownload(message.fileUrl, message.fileName)}>
-                      <Icon name="download" size={20} color="rgba(255,255,255,0.8)" />
+                    <Icon name="download" size={16} color="rgba(255,255,255,0.8)" />
                     </TouchableOpacity>
                   </TouchableOpacity>
                 ) : (
@@ -2059,9 +2606,13 @@ const StudentChat = () => {
                     />
                   </TouchableOpacity>
                 ) : message.fileType?.startsWith('audio/') ? (
-                  <TouchableOpacity style={styles.audioContainer} onPress={() => handleAudioPlay(message.fileUrl)}>
-                    <TouchableOpacity style={styles.audioButton} onPress={() => handleAudioPlay(message.fileUrl)}>
-                      <Icon name="play" size={20} color="white" />
+                  <TouchableOpacity style={styles.audioContainer} onPress={() => handleAudioPlay(message.fileUrl, message.id)}>
+                    <TouchableOpacity style={styles.audioButton} onPress={() => handleAudioPlay(message.fileUrl, message.id)}>
+                      <Icon 
+                        name={playingAudioId === message.id ? "pause" : "play"} 
+                        size={16} 
+                        color="white" 
+                      />
                     </TouchableOpacity>
                     <View style={styles.audioInfo}>
                       <Text style={[styles.audioText, { color: '#1F2937' }]}>
@@ -2074,7 +2625,7 @@ const StudentChat = () => {
                       )}
                     </View>
                     <TouchableOpacity style={styles.downloadButton} onPress={() => handleFileDownload(message.fileUrl, message.fileName)}>
-                      <Icon name="download" size={20} color="#667EEA" />
+                      <Icon name="download" size={16} color="#667EEA" />
                     </TouchableOpacity>
                   </TouchableOpacity>
                 ) : (
@@ -2194,54 +2745,130 @@ const StudentChat = () => {
     );
   };
 
-  const renderChatList = () => (
-    <View style={styles.chatListContainer}>
-      <LinearGradient colors={['#015382', '#017DB0']} style={styles.chatListHeader}>
-        <View style={styles.headerContent}>
-          <View style={styles.headerTitleContainer}>
-            <Icon name="message-text" size={24} color="white" />
-            <View style={styles.headerTextContainer}>
-              <Text style={styles.chatListTitle}>Messages</Text>
-              <Text style={styles.chatListSubtitle}>Connect with your writers</Text>
-            </View>
-          </View>
+  const renderAgreementItem = ({ item: agreement }) => (
+    <View style={styles.agreementCard}>
+      <View style={styles.agreementHeader}>
+        <View style={styles.agreementInfo}>
+          <Text style={styles.agreementTitle} numberOfLines={2}>
+            {agreement.title}
+          </Text>
+          <Text style={styles.agreementWriter}>
+            Writer: {agreement.writerName}
+          </Text>
+          <Text style={styles.agreementAmount}>
+            {formatCurrency(agreement.amount, agreement)}
+          </Text>
         </View>
+        
+        <Chip
+          style={[styles.statusChip, { backgroundColor: getStatusColor(agreement.status) }]}
+          textStyle={styles.statusChipText}
+        >
+          {agreement.status.toUpperCase()}
+        </Chip>
+      </View>
 
-        <Searchbar
-          placeholder="Search conversations..."
-          value={chatSearchQuery}
-          onChangeText={setChatSearchQuery}
-          style={styles.searchBar}
-          inputStyle={styles.searchBarInput}
-          iconColor="#667EEA"
-        />
+      {agreement.deadline && (
+        <Text style={styles.agreementDeadline}>
+          Due: {new Date(agreement.deadline).toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+          })}
+        </Text>
+      )}
+
+      <View style={styles.agreementActions}>
+        <Button
+          mode="outlined"
+          onPress={() => router.push(`/agreement/${agreement.id}`)}
+          style={styles.viewButton}
+          icon="eye"
+        >
+          View Details
+        </Button>
+      </View>
+    </View>
+  );
+
+  const renderMainList = () => {
+    if (activeTab === 'chats') {
+      return (
+        <View style={styles.listContainer}>
+          {filteredChats.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyIcon}>💬</Text>
+              <Text style={styles.emptyTitle}>No Conversations Yet</Text>
+              <Text style={styles.emptyText}>
+                Your writer conversations will appear here
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={filteredChats}
+              renderItem={renderChatItem}
+              keyExtractor={(item, index) => String(item._id || item.id || item.chatId || (item?.otherParticipant && (item?.otherParticipant?._id || item?.otherParticipant?.id)) || `chat-${index}`)}
+              style={styles.list}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+        </View>
+      );
+    }
+
+    return (
+      <View style={styles.listContainer}>
+        {agreements.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyIcon}>📋</Text>
+            <Text style={styles.emptyTitle}>No Agreements Yet</Text>
+            <Text style={styles.emptyText}>
+              Project agreements with writers will appear here
+            </Text>
+          </View>
+        ) : (
+          <FlatList
+            data={agreements}
+            renderItem={renderAgreementItem}
+            keyExtractor={(item, index) => String(item._id || item.id || item.agreementId || `agreement-${index}`)}
+            style={styles.list}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.agreementsList}
+          />
+        )}
+      </View>
+    );
+  };
+
+  const renderMainView = () => (
+    <View style={styles.mainContainer}>
+      <LinearGradient colors={['#015382', '#017DB0']} style={styles.mainHeader}>
+        <Text style={styles.mainTitle}>Student Dashboard</Text>
+        <Text style={styles.mainSubtitle}>Manage your conversations and agreements</Text>
       </LinearGradient>
 
-      {filteredChats.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Icon name="message-outline" size={64} color="#E5E7EB" />
-          <Text style={styles.emptyTitle}>No Conversations Yet</Text>
-          <Text style={styles.emptyText}>
-            Start chatting with writers to see your conversations here
+      {/* Tabs */}
+      <View style={styles.tabsContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'chats' && styles.activeTab]}
+          onPress={() => setActiveTab('chats')}
+        >
+          <Text style={[styles.tabText, activeTab === 'chats' && styles.activeTabText]}>
+            💬 Messages ({chats.length})
           </Text>
-          <Button
-            mode="contained"
-            onPress={() => router.push('/writers')}
-            style={styles.findWritersButton}
-            contentStyle={styles.buttonContent}
-          >
-            Find Writers
-          </Button>
-        </View>
-      ) : (
-        <FlatList
-          data={filteredChats}
-          renderItem={renderChatItem}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.chatListContent}
-        />
-      )}
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'agreements' && styles.activeTab]}
+          onPress={() => setActiveTab('agreements')}
+        >
+          <Text style={[styles.tabText, activeTab === 'agreements' && styles.activeTabText]}>
+            📋 Agreements ({agreements.filter(a => a.status === 'pending').length})
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {renderMainList()}
     </View>
   );
 
@@ -2377,20 +3004,24 @@ const StudentChat = () => {
             ref={flatListRef}
             data={messages}
             renderItem={renderMessage}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => String(item._id || item.id || item.messageId || item.timestamp || `msg-${index}`)}
             contentContainerStyle={styles.messagesList}
-            onContentSizeChange={scrollToBottom}
-            onLayout={scrollToBottom}
+            onContentSizeChange={() => scrollToBottom(false)}
+            onLayout={() => scrollToBottom(false)}
             showsVerticalScrollIndicator={false}
             onScroll={(event) => {
               const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
               const isAtBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 50;
               setShowScrollToBottom(!isAtBottom);
             }}
-            removeClippedSubviews={true}
-            maxToRenderPerBatch={10}
-            windowSize={10}
-            initialNumToRender={20}
+            removeClippedSubviews={false}
+            maxToRenderPerBatch={15}
+            windowSize={15}
+            initialNumToRender={25}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 10
+            }}
           />
         )}
         
@@ -2545,8 +3176,91 @@ const StudentChat = () => {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.container}
         >
-          {showChatList ? renderChatList() : renderChatView()}
+          {showChatList ? renderMainView() : renderChatView()}
         </KeyboardAvoidingView>
+
+        {/* Audio Call UI */}
+        {callState !== 'idle' && (
+          <View style={styles.callContainer}>
+            <LinearGradient colors={['#1F2937', '#374151']} style={styles.callHeader}>
+              <View style={styles.callInfo}>
+                <Avatar.Image
+                  size={60}
+                  source={{
+                    uri: incomingCall?.callerAvatar || outgoingCall?.recipientAvatar ||
+                         `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                           incomingCall?.callerName || outgoingCall?.recipientName || 'User'
+                         )}`
+                  }}
+                />
+                <View style={styles.callDetails}>
+                  <Text style={styles.callName}>
+                    {incomingCall?.callerName || outgoingCall?.recipientName || 'Unknown User'}
+                  </Text>
+                  <Text style={styles.callStatus}>
+                    {callState === 'calling' && 'Calling...'}
+                    {callState === 'ringing' && 'Incoming call'}
+                    {callState === 'connected' && `Connected • ${formatCallDuration(callDuration)}`}
+                    {callState === 'ended' && 'Call ended'}
+                    {callState === 'failed' && 'Call failed'}
+                  </Text>
+                  {callQuality !== 'good' && callState === 'connected' && (
+                    <Text style={styles.callQuality}>
+                      Call quality: {callQuality}
+                    </Text>
+                  )}
+                </View>
+              </View>
+            </LinearGradient>
+
+            <View style={styles.callControls}>
+              {callState === 'ringing' && (
+                <>
+                  <TouchableOpacity style={styles.rejectButton} onPress={rejectCall}>
+                    <Icon name="phone-hangup" size={24} color="white" />
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.acceptButton} onPress={acceptCall}>
+                    <Icon name="phone" size={24} color="white" />
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {callState === 'calling' && (
+                <TouchableOpacity style={styles.endCallButton} onPress={endCall}>
+                  <Icon name="phone-hangup" size={24} color="white" />
+                </TouchableOpacity>
+              )}
+
+              {callState === 'connected' && (
+                <>
+                  <TouchableOpacity
+                    style={[styles.callControlButton, isMuted && styles.callControlButtonActive]}
+                    onPress={toggleMute}
+                  >
+                    <Icon name={isMuted ? "microphone-off" : "microphone"} size={20} color="white" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.callControlButton, isSpeakerOn && styles.callControlButtonActive]}
+                    onPress={toggleSpeaker}
+                  >
+                    <Icon name={isSpeakerOn ? "volume-high" : "volume-low"} size={20} color="white" />
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.endCallButton} onPress={endCall}>
+                    <Icon name="phone-hangup" size={24} color="white" />
+                  </TouchableOpacity>
+                </>
+              )}
+
+              {(callState === 'ended' || callState === 'failed') && (
+                <TouchableOpacity style={styles.closeCallButton} onPress={endCall}>
+                  <Icon name="close" size={24} color="white" />
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        )}
 
         {/* File Selection Modal */}
         <Portal>
@@ -2605,5 +3319,6 @@ const StudentChat = () => {
     </PaperProvider>
   );
 };
+
 
 export default StudentChat;

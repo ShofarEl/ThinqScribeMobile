@@ -2,13 +2,32 @@
 import { LinearGradient } from 'expo-linear-gradient';
 import { router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Button, Card, IconButton } from 'react-native-paper';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Dimensions, StyleSheet, Text, View } from 'react-native';
+import { Button, Card } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const { width, height } = Dimensions.get('window');
 
 const PrivacyScreen: React.FC = () => {
   const lastUpdated = "December 15, 2024";
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideAnim = useRef(new Animated.Value(50)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(fadeAnim, {
+        toValue: 1,
+        duration: 800,
+        useNativeDriver: true,
+      }),
+      Animated.timing(slideAnim, {
+        toValue: 0,
+        duration: 600,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  }, [fadeAnim, slideAnim]);
 
   const sections = [
     {
@@ -38,114 +57,308 @@ const PrivacyScreen: React.FC = () => {
     },
   ];
 
-  const renderHeader = () => (
-    <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
-      <View style={styles.headerContent}>
-        <IconButton icon="arrow-left" iconColor="#ffffff" onPress={() => router.back()} />
-        <View style={styles.headerTextContainer}>
-          <Text style={styles.headerTitle}>Privacy Policy</Text>
-          <Text style={styles.headerSubtitle}>Your privacy is our priority</Text>
-          <Text style={styles.lastUpdated}>Last Updated: {lastUpdated}</Text>
-        </View>
-      </View>
-    </LinearGradient>
-  );
 
   const renderIntroduction = () => (
-    <Card style={styles.sectionCard}>
-      <Card.Content>
-        <Text style={styles.introTitle}>Our Commitment to Your Privacy</Text>
-        <Text style={styles.introText}>
-          At ThinqScribe, we are committed to protecting your privacy and ensuring the security of your personal information. 
-          This Privacy Policy explains how we collect, use, share, and protect your information when you use our academic 
-          writing platform and services.
-        </Text>
-        <Text style={styles.introText}>
-          By using ThinqScribe, you consent to the practices described in this Privacy Policy. We encourage you to read 
-          this policy carefully and contact us if you have any questions.
-        </Text>
-      </Card.Content>
-    </Card>
+    <Animated.View style={[
+      styles.sectionCard,
+      {
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim }]
+      }
+    ]}>
+      <LinearGradient
+        colors={['rgba(255,255,255,0.95)', 'rgba(248,250,252,0.95)']}
+        style={styles.cardGradient}
+      >
+        <Card.Content style={styles.cardContent}>
+          <View style={styles.introIconContainer}>
+            <Text style={styles.introIcon}>🔒</Text>
+          </View>
+          <Text style={styles.introTitle}>Our Commitment to Your Privacy</Text>
+          <View style={styles.divider} />
+          <Text style={styles.introText}>
+            At ThinqScribe, we are committed to protecting your privacy and ensuring the security of your personal information.
+            This Privacy Policy explains how we collect, use, share, and protect your information when you use our academic
+            writing platform and services.
+          </Text>
+          <Text style={styles.introText}>
+            By using ThinqScribe, you consent to the practices described in this Privacy Policy. We encourage you to read
+            this policy carefully and contact us if you have any questions.
+          </Text>
+        </Card.Content>
+      </LinearGradient>
+    </Animated.View>
   );
 
   const renderSection = (section: typeof sections[0], index: number) => (
-    <Card key={index} style={styles.sectionCard}>
-      <Card.Content>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionIcon}>{section.icon}</Text>
-          <Text style={styles.sectionTitle}>{section.title}</Text>
-        </View>
-        <Text style={styles.sectionContent}>{section.content}</Text>
-      </Card.Content>
-    </Card>
+    <Animated.View
+      key={index}
+      style={[
+        styles.sectionCard,
+        {
+          opacity: fadeAnim,
+          transform: [{ translateY: slideAnim.interpolate({
+            inputRange: [0, 50],
+            outputRange: [0, 50 + index * 10],
+          }) }]
+        }
+      ]}
+    >
+      <LinearGradient
+        colors={['rgba(255,255,255,0.98)', 'rgba(248,250,252,0.95)']}
+        style={styles.cardGradient}
+      >
+        <Card.Content style={styles.cardContent}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.iconContainer}>
+              <Text style={styles.sectionIcon}>{section.icon}</Text>
+            </View>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+          </View>
+          <View style={styles.divider} />
+          <Text style={styles.sectionContent}>{section.content}</Text>
+        </Card.Content>
+      </LinearGradient>
+    </Animated.View>
   );
 
   const renderContact = () => (
-    <Card style={styles.sectionCard}>
-      <Card.Content>
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionIcon}>📞</Text>
-          <Text style={styles.sectionTitle}>Contact Us</Text>
-        </View>
-        
-        <Text style={styles.contactText}>
-          If you have any questions about this Privacy Policy, please contact us:
-        </Text>
-        
-        <View style={styles.contactInfo}>
-          <Text style={styles.contactItem}>📧 Email: privacy@thinqscribe.com</Text>
-          <Text style={styles.contactItem}>📍 Address: 123 Academic Ave, Education City, EC 12345</Text>
-          <Text style={styles.contactItem}>📱 Phone: +1 (555) 123-4567</Text>
-        </View>
-        
-        <View style={styles.contactButtons}>
-          <Button mode="contained" onPress={() => router.push('/support')} style={styles.contactButton} icon="message">
-            Contact Support
-          </Button>
-          <Button mode="outlined" onPress={() => router.push('/terms')} style={styles.termsButton} icon="file-document">
-            View Terms of Service
-          </Button>
-        </View>
-      </Card.Content>
-    </Card>
+    <Animated.View style={[
+      styles.sectionCard,
+      {
+        opacity: fadeAnim,
+        transform: [{ translateY: slideAnim.interpolate({
+          inputRange: [0, 50],
+          outputRange: [0, 80],
+        }) }]
+      }
+    ]}>
+      <LinearGradient
+        colors={['rgba(1, 83, 130, 0.05)', 'rgba(30, 64, 175, 0.05)']}
+        style={styles.cardGradient}
+      >
+        <Card.Content style={styles.cardContent}>
+          <View style={styles.sectionHeader}>
+            <View style={styles.iconContainer}>
+              <Text style={styles.sectionIcon}>📞</Text>
+            </View>
+            <Text style={styles.sectionTitle}>Contact Us</Text>
+          </View>
+          <View style={styles.divider} />
+
+          <Text style={styles.contactText}>
+            If you have any questions about this Privacy Policy, please contact us:
+          </Text>
+
+          <View style={styles.contactInfo}>
+            <View style={styles.contactItem}>
+              <Text style={styles.contactIcon}>📧</Text>
+              <Text style={styles.contactText}>business@thinqscribe.com</Text>
+            </View>
+            <View style={styles.contactItem}>
+              <Text style={styles.contactIcon}>📍</Text>
+              <Text style={styles.contactText}>123 Academic Ave, Education City, EC 12345</Text>
+            </View>
+            <View style={styles.contactItem}>
+              <Text style={styles.contactIcon}>📱</Text>
+              <Text style={styles.contactText}>+234 811 116 1612</Text>
+            </View>
+          </View>
+
+          <View style={styles.contactButtons}>
+            <Button
+              mode="contained"
+              onPress={() => router.push('/support')}
+              style={styles.contactButton}
+              icon="message"
+              labelStyle={styles.buttonText}
+            >
+              Contact Support
+            </Button>
+            <Button
+              mode="outlined"
+              onPress={() => router.push('/terms')}
+              style={styles.termsButton}
+              icon="file-document"
+              labelStyle={styles.outlineButtonText}
+            >
+              View Terms of Service
+            </Button>
+          </View>
+        </Card.Content>
+      </LinearGradient>
+    </Animated.View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar style="light" />
-      {renderHeader()}
-      
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <StatusBar style="dark" />
+
+      <Animated.ScrollView
+        style={[
+          styles.content,
+          {
+            opacity: fadeAnim,
+            transform: [{ translateY: slideAnim.interpolate({
+              inputRange: [0, 50],
+              outputRange: [0, 20],
+            }) }]
+          }
+        ]}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {renderIntroduction()}
         {sections.map((section, index) => renderSection(section, index))}
         {renderContact()}
-      </ScrollView>
+      </Animated.ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: { paddingVertical: 30 },
-  headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16 },
-  headerTextContainer: { flex: 1, marginLeft: 12, alignItems: 'center' },
-  headerTitle: { fontSize: 28, fontWeight: '800', color: 'white', marginBottom: 8 },
-  headerSubtitle: { fontSize: 16, color: 'rgba(255,255,255,0.9)', marginBottom: 12 },
-  lastUpdated: { fontSize: 14, color: 'rgba(255,255,255,0.8)', fontStyle: 'italic' },
-  content: { flex: 1 },
-  sectionCard: { margin: 16, marginTop: 8, borderRadius: 16, elevation: 3 },
-  introTitle: { fontSize: 20, fontWeight: '700', color: '#1e293b', marginBottom: 16, textAlign: 'center' },
-  introText: { fontSize: 16, color: '#475569', lineHeight: 24, marginBottom: 16, textAlign: 'justify' },
-  sectionHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
-  sectionIcon: { fontSize: 24, marginRight: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1e293b', flex: 1 },
-  sectionContent: { fontSize: 14, color: '#475569', lineHeight: 22, textAlign: 'justify' },
-  contactText: { fontSize: 16, color: '#475569', lineHeight: 22, marginBottom: 20, textAlign: 'center' },
-  contactInfo: { backgroundColor: '#f8fafc', padding: 16, borderRadius: 12, marginBottom: 16 },
-  contactItem: { fontSize: 14, color: '#1e293b', marginBottom: 8, lineHeight: 20 },
-  contactButtons: { gap: 12 },
-  contactButton: { backgroundColor: '#667eea', borderRadius: 12, paddingVertical: 4 },
-  termsButton: { borderColor: '#667eea', borderRadius: 12, paddingVertical: 4 },
+  container: {
+    flex: 1,
+    backgroundColor: '#f8fafc'
+  },
+  content: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 40,
+  },
+  sectionCard: {
+    marginHorizontal: 20,
+    marginTop: 20,
+    borderRadius: 20,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    overflow: 'hidden',
+  },
+  cardGradient: {
+    flex: 1,
+  },
+  cardContent: {
+    padding: 24,
+  },
+  introIconContainer: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  introIcon: {
+    fontSize: 48,
+  },
+  introTitle: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#1e293b',
+    marginBottom: 16,
+    textAlign: 'center',
+    letterSpacing: -0.3,
+  },
+  introText: {
+    fontSize: 16,
+    color: '#64748b',
+    lineHeight: 26,
+    marginBottom: 16,
+    textAlign: 'justify',
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  iconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(1, 83, 130, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 16,
+  },
+  sectionIcon: {
+    fontSize: 24,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    flex: 1,
+    letterSpacing: -0.2,
+  },
+  sectionContent: {
+    fontSize: 15,
+    color: '#64748b',
+    lineHeight: 24,
+    textAlign: 'justify',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(1, 83, 130, 0.2)',
+    marginBottom: 20,
+    borderRadius: 0.5,
+  },
+  contactText: {
+    fontSize: 16,
+    color: '#64748b',
+    lineHeight: 24,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  contactInfo: {
+    backgroundColor: 'rgba(248, 250, 252, 0.8)',
+    padding: 20,
+    borderRadius: 16,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(1, 83, 130, 0.1)',
+  },
+  contactItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  contactIcon: {
+    fontSize: 18,
+    marginRight: 12,
+    width: 24,
+    textAlign: 'center',
+  },
+  contactButtons: {
+    gap: 16,
+  },
+  contactButton: {
+    backgroundColor: '#153862',
+    borderRadius: 16,
+    paddingVertical: 6,
+    elevation: 4,
+    shadowColor: '#153862',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  termsButton: {
+    borderColor: '#153862',
+    borderWidth: 2,
+    borderRadius: 16,
+    paddingVertical: 6,
+  },
+  buttonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: 0.5,
+  },
+  outlineButtonText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#153862',
+    letterSpacing: 0.5,
+  },
 });
 
 export default PrivacyScreen;
