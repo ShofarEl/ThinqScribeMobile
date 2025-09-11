@@ -50,6 +50,7 @@ const WebRTCAudioCall = ({
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectionQuality, setConnectionQuality] = useState('good');
   const [error, setError] = useState(null);
+  const [ringtoneSound, setRingtoneSound] = useState(null);
 
   // WebRTC Refs
   const peerConnectionRef = useRef(null);
@@ -98,10 +99,21 @@ const WebRTCAudioCall = ({
         duration: 500,
         useNativeDriver: true,
       }).start();
+      stopRingtone();
     } else {
       stopCallTimer();
     }
   }, [callState]);
+
+  // Play/stop ringtone on incoming/calling states
+  useEffect(() => {
+    if (!visible) return;
+    if (callState === 'incoming' || callState === 'calling' || callState === 'connecting') {
+      startRingtone();
+    } else {
+      stopRingtone();
+    }
+  }, [callState, visible]);
 
   const setupAudio = async () => {
     try {
@@ -116,6 +128,31 @@ const WebRTCAudioCall = ({
     } catch (error) {
       console.error('Audio setup error:', error);
       setError('Failed to setup audio');
+    }
+  };
+
+  const startRingtone = async () => {
+    try {
+      // Prevent duplicate sounds
+      if (ringtoneSound) return;
+      const { sound } = await Audio.Sound.createAsync(
+        require('../../assets/live-the-moment-67986.mp3'),
+        { shouldPlay: true, isLooping: true, volume: 0.5 }
+      );
+      setRingtoneSound(sound);
+    } catch (e) {
+      console.warn('Ringtone start error:', e);
+    }
+  };
+
+  const stopRingtone = async () => {
+    try {
+      if (ringtoneSound) {
+        await ringtoneSound.unloadAsync();
+        setRingtoneSound(null);
+      }
+    } catch (e) {
+      console.warn('Ringtone stop error:', e);
     }
   };
 
@@ -410,6 +447,7 @@ const WebRTCAudioCall = ({
     
     stopCallTimer();
     Vibration.cancel();
+    stopRingtone();
     
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach(track => track.stop());

@@ -1,36 +1,42 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import React, { useEffect, useRef, useState } from 'react';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    KeyboardAvoidingView,
-    Linking,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Linking,
+  PanResponder,
+  Platform,
+  TextInput as RNTextInput,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import {
-    ActivityIndicator,
-    Avatar,
-    Badge,
-    Button,
-    Card,
-    Chip,
-    Searchbar,
-    Snackbar,
-    TextInput
+  ActivityIndicator,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Chip,
+  Searchbar,
+  Snackbar
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { agreementApi } from '../api/agreement';
 import { getChatMessages, getUserChats, sendChatFile, sendMessage as sendChatMessage } from '../api/chat';
 import CompleteAssignmentModal from '../components/CompleteAssignmentModal';
@@ -44,9 +50,15 @@ const { width, height } = Dimensions.get('window');
 const WriterChat = () => {
   const { chatId } = useLocalSearchParams();
   const router = useRouter();
+  const navigation = useNavigation();
   const { user } = useAuth();
   const { setLoading: setGlobalLoading } = useAppLoading();
   const { socket, joinChat, leaveChat, sendTypingIndicator } = useSocket() || {};
+
+  // Debug log to confirm component is loading
+  console.log('🎯 [WriterChat] Component loaded with audio call functionality!');
+  console.log('🎯 [WriterChat] User role:', user?.role);
+  console.log('🎯 [WriterChat] Chat ID:', chatId);
 
   // State management - comprehensive state for all features
   const [messages, setMessages] = useState([]);
@@ -57,11 +69,13 @@ const WriterChat = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMessages, setLoadingMessages] = useState(false);
   const [sending, setSending] = useState(false);
   const [showChatList, setShowChatList] = useState(!chatId);
   const [activeTab, setActiveTab] = useState('chats'); // 'chats' or 'agreements'
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [typingUsers, setTypingUsers] = useState(new Set());
+  const [otherUserTyping, setOtherUserTyping] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -72,6 +86,98 @@ const WriterChat = () => {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [playingAudioId, setPlayingAudioId] = useState(null);
+  const [currentSound, setCurrentSound] = useState(null);
+  const [swipeThreshold] = useState(64);
+  const messageIndexMapRef = useRef(new Map());
+
+  const normalizeMessages = (msgs) => {
+    try {
+      const arr = Array.isArray(msgs) ? msgs : [];
+      const messageMap = new Map();
+      
+      // First pass: create a map of all messages for reference lookup
+      arr.forEach(msg => {
+        const key = msg._id || msg.id;
+        if (key) {
+          messageMap.set(key, msg);
+        }
+      });
+      
+      return arr.map(m => {
+        // Ensure basic message structure
+        const normalizedMessage = {
+          id: m._id || m.id,
+          content: m.content || m.message || '',
+          sender: m.sender || { _id: '', name: 'Unknown', avatar: null },
+          timestamp: m.timestamp || m.createdAt || new Date().toISOString(),
+          fileUrl: m.fileUrl,
+          fileName: m.fileName,
+          fileType: m.fileType,
+          fileSize: m.fileSize,
+          voiceDuration: m.voiceDuration,
+          read: m.read || false,
+          chatId: m.chatId,
+          isFromServer: m.isFromServer || false,
+          replyTo: null // Initialize as null
+        };
+
+        // Handle replyTo properly
+        if (m.replyTo) {
+          const replyTo = m.replyTo;
+          
+          // Case 1: replyTo is just a string ID
+          if (typeof replyTo === 'string') {
+            const referencedMessage = messageMap.get(replyTo);
+            if (referencedMessage) {
+              normalizedMessage.replyTo = {
+                _id: referencedMessage._id || referencedMessage.id,
+                content: referencedMessage.content || referencedMessage.message || 'Message not available',
+                sender: referencedMessage.sender || { _id: '', name: 'Unknown', avatar: null },
+                timestamp: referencedMessage.timestamp || referencedMessage.createdAt || null
+              };
+            } else {
+              // Create placeholder for missing message
+              normalizedMessage.replyTo = { 
+                _id: replyTo, 
+                content: 'Message not available', 
+                sender: { _id: '', name: 'Unknown', avatar: null },
+                timestamp: null
+              };
+            }
+          }
+          // Case 2: replyTo is already an object
+          else if (typeof replyTo === 'object' && replyTo !== null) {
+            normalizedMessage.replyTo = {
+              _id: replyTo._id || replyTo.id || replyTo,
+              content: replyTo.content || replyTo.message || 'Message not available',
+              sender: replyTo.sender || { _id: '', name: 'Unknown', avatar: null },
+              timestamp: replyTo.timestamp || replyTo.createdAt || null
+            };
+          }
+        }
+
+        return normalizedMessage;
+      });
+    } catch (error) {
+      console.warn('❌ [WriterChat] Error normalizing messages:', error);
+      return Array.isArray(msgs) ? msgs : [];
+    }
+  };
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+  
+  // Audio Call States
+  const [callState, setCallState] = useState('idle'); // 'idle', 'calling', 'ringing', 'connected', 'ended', 'failed'
+  const [incomingCall, setIncomingCall] = useState(null);
+  const [outgoingCall, setOutgoingCall] = useState(null);
+  const [callDuration, setCallDuration] = useState(0);
+  const [callStartTime, setCallStartTime] = useState(null);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isSpeakerOn, setIsSpeakerOn] = useState(false);
+  const [callQuality, setCallQuality] = useState('good'); // 'excellent', 'good', 'fair', 'poor'
+  const [callTimer, setCallTimer] = useState(null);
+  const [ringtoneSound, setRingtoneSound] = useState(null);
+  const [callSound, setCallSound] = useState(null);
   
   // Modal states
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -81,19 +187,94 @@ const WriterChat = () => {
 
   // Refs for managing focus and scroll
   const flatListRef = useRef(null);
+  const isMountedRef = useRef(true);
   const typingTimeoutRef = useRef(null);
   const scrollOffsetRef = useRef(0);
 
+  // Hide bottom tabs when inside a chat room
+  useEffect(() => {
+    const parent = navigation?.getParent?.();
+    if (!parent) return;
+    if (!showChatList) {
+      parent.setOptions({ tabBarStyle: { display: 'none' } });
+    } else {
+      parent.setOptions({ tabBarStyle: undefined });
+    }
+    return () => {
+      parent.setOptions({ tabBarStyle: undefined });
+    };
+  }, [navigation, showChatList]);
+
   // Initial data loading
   useEffect(() => {
+    StatusBar.setBarStyle('light-content', true);
     fetchChats();
     fetchAgreements();
     
     if (chatId) {
-      fetchMessages(chatId);
+      (async () => {
+        try {
+          const cached = await AsyncStorage.getItem(`chat_messages_${chatId}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length) {
+              // Re-normalize cached messages to ensure proper structure
+              const reNormalized = normalizeMessages(parsed);
+              setMessages(reNormalized);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to load cached messages:', e);
+        }
+        // Always fetch fresh messages after loading cache
+        fetchMessages(chatId);
+      })();
       setShowChatList(false);
     }
+
+    // Keyboard listeners for proper input sizing
+    const keyboardWillShow = Platform.select({
+      ios: 'keyboardWillShow',
+      android: 'keyboardDidShow'
+    });
+    const keyboardWillHide = Platform.select({
+      ios: 'keyboardWillHide', 
+      android: 'keyboardDidHide'
+    });
+
+    const showSubscription = Keyboard.addListener(keyboardWillShow, (e) => {
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSubscription = Keyboard.addListener(keyboardWillHide, () => {
+      setKeyboardHeight(0);
+    });
+
+    return () => {
+      showSubscription?.remove();
+      hideSubscription?.remove();
+    };
   }, [chatId]);
+
+  // Hide bottom tabs when inside a chat room (showChatList === false)
+  useEffect(() => {
+    const parent = navigation?.getParent?.();
+    if (!parent) return;
+    if (!showChatList) {
+      parent.setOptions({ tabBarStyle: { display: 'none' } });
+    } else {
+      parent.setOptions({ tabBarStyle: undefined });
+    }
+    return () => {
+      parent.setOptions({ tabBarStyle: undefined });
+    };
+  }, [navigation, showChatList]);
+
+  // Cleanup effect
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   // Real-time socket event handling
   useEffect(() => {
@@ -103,53 +284,95 @@ const WriterChat = () => {
 
     const handleReceiveMessage = (data) => {
       try {
-        if (!data || !data.message) return;
+        console.log('📨 [WriterChat] Received message:', data);
+
+        if (!data?.message || data.message.sender._id === user._id) {
+          console.log('📨 [WriterChat] Skipping own message or invalid message');
+          return;
+        }
+
         if (currentChat && data.chatId === currentChat.id) {
           setMessages(prev => {
-            if (prev.some(m => m.id === (data.message._id || data.message.id))) return prev;
-            const mapped = {
+            const existingMessage = prev.find(m =>
+              m.id === data.message._id ||
+              (m.timestamp === data.message.timestamp &&
+               m.sender._id === data.message.sender._id &&
+               m.content === data.message.content)
+            );
+
+            if (existingMessage) {
+              console.log('📨 [WriterChat] Message already exists, skipping');
+              return prev;
+            }
+
+            const newMessage = {
               id: data.message._id || data.message.id,
-              content: data.message?.content || '',
-              sender: data.message?.sender || {},
-              timestamp: data.message?.timestamp || data.message?.createdAt || new Date().toISOString(),
-              fileUrl: data.message?.fileUrl,
-              fileName: data.message?.fileName,
-              fileType: data.message?.fileType,
-              fileSize: data.message?.fileSize,
-              voiceDuration: data.message?.voiceDuration,
-              replyTo: data.message?.replyTo,
-              read: true
+              content: data.message.content || '',
+              sender: data.message.sender,
+              timestamp: data.message.timestamp || data.message.createdAt || new Date().toISOString(),
+              fileUrl: data.message.fileUrl,
+              fileName: data.message.fileName,
+              fileType: data.message.fileType,
+              fileSize: data.message.fileSize,
+              voiceDuration: data.message.voiceDuration,
+              // CRITICAL: Preserve reply structure from server
+              replyTo: data.message.replyTo || null,
+              read: true,
+              chatId: data.chatId,
+              isFromServer: true
             };
-            return [...prev, mapped];
+
+            console.log('📨 [WriterChat] Adding new message to chat');
+            const updated = [...prev, newMessage];
+            
+            // Cache the updated messages with reply context
+            (async () => { 
+              try { 
+                if (currentChat?.id) {
+                  await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); 
+                }
+              } catch (e) {} 
+            })();
+            
+            return updated;
           });
-          socket.emit('markMessagesAsRead', { chatId: currentChat.id, userId: user._id });
-          setTimeout(() => scrollToBottom(), 50);
+
+          socket.emit('markMessagesAsRead', {
+            chatId: currentChat.id,
+            userId: user._id
+          });
+
+          setTimeout(() => scrollToBottom(), 100);
         }
+
+        // Update chat list
         setChats(prev => prev.map(c => c.id === data.chatId ? {
           ...c,
           lastMessage: data.message?.content || c.lastMessage,
           lastMessageTime: data.message?.timestamp || new Date().toISOString()
         } : c));
+
       } catch (error) {
-        console.error('Error handling received message:', error);
+        console.error('❌ [WriterChat] Error handling received message:', error);
       }
     };
 
-    const handleTyping = ({ chatId: cId, userId }) => {
+    const handleTyping = ({ chatId: cId, userId, userName }) => {
       if (!currentChat || userId === user._id) return;
       if (currentChat.id === cId) {
-        setTypingUsers(prev => new Set([...prev, userId]));
+        setOtherUserTyping(true);
+        clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => {
+          setOtherUserTyping(false);
+        }, 3000);
       }
     };
 
     const handleStopTyping = ({ chatId: cId, userId }) => {
       if (!currentChat || userId === user._id) return;
       if (currentChat.id === cId) {
-        setTypingUsers(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(userId);
-          return newSet;
-        });
+        setOtherUserTyping(false);
+        clearTimeout(typingTimeoutRef.current);
       }
     };
 
@@ -175,6 +398,62 @@ const WriterChat = () => {
       });
     };
 
+    // Audio Call Event Handlers
+    const handleIncomingCall = (callData) => {
+      console.log('📞 [WriterChat] Incoming call:', callData);
+      
+      // Navigate to incoming call screen
+      router.push({
+        pathname: '/audio-call',
+        params: {
+          userId: callData.from,
+          userName: callData.fromName,
+          userAvatar: callData.fromAvatar,
+          isIncoming: 'true',
+          chatId: callData.chatId,
+          callId: callData.callId
+        }
+      });
+    };
+
+    const handleCallAccepted = (callData) => {
+      console.log('📞 [WriterChat] Call accepted:', callData);
+      setCallState('connected');
+      setCallStartTime(Date.now());
+      stopRingtone();
+      startCallTimer();
+      
+      // Start simulated audio streaming
+      startAudioStreaming();
+      
+      showSnackbar('Call connected');
+    };
+
+    const handleCallRejected = (callData) => {
+      console.log('📞 [WriterChat] Call rejected:', callData);
+      setCallState('idle');
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      stopRingtone();
+      showSnackbar('Call rejected');
+    };
+
+    const handleCallEnded = (callData) => {
+      console.log('📞 [WriterChat] Call ended:', callData);
+      endCall();
+      stopAudioStreaming();
+      showSnackbar('Call ended');
+    };
+
+    const handleCallFailed = (callData) => {
+      console.log('📞 [WriterChat] Call failed:', callData);
+      setCallState('failed');
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      stopRingtone();
+      showSnackbar('Call failed');
+    };
+
     // Socket event listeners
     socket.on('messageBroadcast', handleReceiveMessage);
     socket.on('newMessage', handleReceiveMessage);
@@ -185,8 +464,18 @@ const WriterChat = () => {
     socket.on('userOnline', handleUserOnline);
     socket.on('userOffline', handleUserOffline);
     socket.on('messagesRead', handleMessagesRead);
+    
+    // Call event listeners
+    socket.on('incomingCall', handleIncomingCall);
+    socket.on('callAccepted', handleCallAccepted);
+    socket.on('callRejected', handleCallRejected);
+    socket.on('callEnded', handleCallEnded);
+    socket.on('callFailed', handleCallFailed);
 
     return () => {
+      console.log('🧹 [WriterChat] Cleaning up socket listeners');
+
+      // Remove all message-related listeners
       socket.off('messageBroadcast', handleReceiveMessage);
       socket.off('newMessage', handleReceiveMessage);
       socket.off('messageSent', handleReceiveMessage);
@@ -196,6 +485,34 @@ const WriterChat = () => {
       socket.off('userOnline', handleUserOnline);
       socket.off('userOffline', handleUserOffline);
       socket.off('messagesRead', handleMessagesRead);
+
+      // Remove all call-related listeners
+      socket.off('incomingCall', handleIncomingCall);
+      socket.off('callAccepted', handleCallAccepted);
+      socket.off('callRejected', handleCallRejected);
+      socket.off('callEnded', handleCallEnded);
+      socket.off('callFailed', handleCallFailed);
+
+      // Clear any pending timeouts
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Stop any active call timers
+      if (callTimer) {
+        clearInterval(callTimer);
+      }
+
+      // Clean up audio resources
+      if (currentSound) {
+        currentSound.unloadAsync();
+      }
+      if (ringtoneSound) {
+        ringtoneSound.unloadAsync();
+      }
+      if (callSound) {
+        callSound.unloadAsync();
+      }
     };
   }, [socket, user?._id, currentChat]);
 
@@ -263,14 +580,16 @@ const WriterChat = () => {
 
   const fetchMessages = async (selectedChatId = chatId) => {
     if (!selectedChatId) return;
-    
+
     try {
+      setLoadingMessages(true);
       console.log('📱 [WriterChat] Fetching messages for chat:', selectedChatId);
+
       const messagesData = await getChatMessages(selectedChatId);
-      console.log('📱 [WriterChat] Messages data:', messagesData);
-      
+      console.log('📱 [WriterChat] Raw messages data:', messagesData);
+
       const messagesArray = Array.isArray(messagesData) ? messagesData : messagesData?.messages || [];
-      
+
       const enhancedMessages = messagesArray.map(msg => ({
         id: msg._id || msg.id,
         content: msg.content || msg.message || '',
@@ -281,19 +600,51 @@ const WriterChat = () => {
         fileType: msg.fileType,
         fileSize: msg.fileSize,
         voiceDuration: msg.voiceDuration,
-        replyTo: msg.replyTo,
-        read: msg.read || false
+        // CRITICAL: Preserve the original replyTo structure from server
+        replyTo: msg.replyTo || null,
+        read: msg.read || false,
+        chatId: selectedChatId,
+        isFromServer: true
       }));
+
+      // Sort messages by timestamp
+      const sortedMessages = enhancedMessages.sort((a, b) =>
+        new Date(a.timestamp) - new Date(b.timestamp)
+      );
+
+      // Normalize with proper reply handling
+      const normalized = normalizeMessages(sortedMessages);
+      setMessages(normalized);
       
-      setMessages(enhancedMessages.reverse()); // Most recent at bottom
-      
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
-      
-    } catch (err) {
-      console.error('📱 [WriterChat] Error fetching messages:', err);
-      Alert.alert('Error', 'Failed to load messages');
+      // Cache the normalized messages
+      try { 
+        await AsyncStorage.setItem(`chat_messages_${selectedChatId}`, JSON.stringify(normalized)); 
+      } catch (e) {
+        console.warn('Failed to cache messages:', e);
+      }
+
+      // Mark messages as read only if we're not already in a loading state
+      if (socket && !loading) {
+        try {
+          socket.emit('markMessagesAsRead', { chatId: selectedChatId, userId: user._id });
+        } catch (e) {
+          console.warn('Failed to mark messages as read:', e);
+        }
+      }
+
+      // Scroll to bottom after a brief delay to allow rendering
+      setTimeout(() => scrollToBottom(false), 100);
+
+    } catch (error) {
+      console.error('📱 [WriterChat] Error fetching messages:', error);
+      showSnackbar('Failed to load messages');
+
+      // Don't clear messages on error - keep existing ones
+      if (messages.length === 0) {
+        setMessages([]);
+      }
+    } finally {
+      setLoadingMessages(false);
     }
   };
 
@@ -303,7 +654,7 @@ const WriterChat = () => {
 
     const messageContent = messageText.trim();
     const filesToSend = [...selectedFiles];
-    const replyToMessage = replyingTo;
+    const replyToMessage = replyingTo; // Store the full reply context
 
     setMessageText('');
     setSelectedFiles([]);
@@ -327,11 +678,29 @@ const WriterChat = () => {
             fileName: file.name,
             fileType: file.mimeType,
             fileSize: file.size,
-            replyTo: replyToMessage,
+            // CRITICAL: Preserve the full reply context in optimistic message
+            replyTo: replyToMessage ? {
+              _id: replyToMessage._id || replyToMessage.id,
+              content: replyToMessage.content,
+              sender: replyToMessage.sender,
+              timestamp: replyToMessage.timestamp
+            } : null,
             isOptimistic: true,
             isUploading: true
           };
-          setMessages(prev => [...prev, optimisticMessage]);
+
+          setMessages(prev => {
+            const updated = [...prev, optimisticMessage];
+            // Cache with reply context preserved
+            (async () => { 
+              try { 
+                if (currentChat?.id) {
+                  await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); 
+                }
+              } catch (e) {} 
+            })();
+            return updated;
+          });
           setSendingMessages(prev => new Set([...prev, optimisticId]));
           scrollToBottom();
 
@@ -340,17 +709,23 @@ const WriterChat = () => {
               chatId: currentChat.id,
               file: { uri: file.uri, name: file.name, type: file.mimeType, size: file.size },
               content: messageContent,
-              replyTo: replyToMessage?._id,
+              replyTo: replyToMessage?._id || replyToMessage?.id,
               voiceDuration: file.duration
             });
 
             setMessages(prev => prev.map(msg => msg.id === optimisticId ? {
-            ...realMessage,
-            id: realMessage._id,
-            isOptimistic: false,
-            isUploading: false,
-            replyTo: realMessage.replyTo || replyToMessage
-          } : msg));
+              ...realMessage,
+              id: realMessage._id,
+              isOptimistic: false,
+              isUploading: false,
+              // Ensure reply context is preserved from server or fallback to original
+              replyTo: realMessage.replyTo || replyToMessage ? {
+                _id: replyToMessage._id || replyToMessage.id,
+                content: replyToMessage.content,
+                sender: replyToMessage.sender,
+                timestamp: replyToMessage.timestamp
+              } : null
+            } : msg));
 
             setSendingMessages(prev => {
               const newSet = new Set(prev);
@@ -360,31 +735,26 @@ const WriterChat = () => {
 
           } catch (uploadErr) {
             console.error('❌ [WriterChat] File upload error:', uploadErr);
-            console.error('❌ [WriterChat] Error details:', {
-              message: uploadErr.message,
-              status: uploadErr.status,
-              response: uploadErr.response?.data
-            });
-
-            let errorMessage = `Failed to upload: ${file.name}`;
-            if (uploadErr.response?.data?.message) {
-              errorMessage += ` - ${uploadErr.response.data.message}`;
-            } else if (uploadErr.message) {
-              errorMessage += ` - ${uploadErr.message}`;
-            }
-
+            
             setMessages(prev => prev.map(msg => msg.id === optimisticId ? {
               ...msg,
-              content: errorMessage,
+              content: `Failed to upload: ${file.name}`,
               isUploading: false,
-              uploadError: true
+              uploadError: true,
+              replyTo: replyToMessage ? {
+                _id: replyToMessage._id || replyToMessage.id,
+                content: replyToMessage.content,
+                sender: replyToMessage.sender,
+                timestamp: replyToMessage.timestamp
+              } : null
             } : msg));
+            
             setSendingMessages(prev => {
               const newSet = new Set(prev);
               newSet.delete(optimisticId);
               return newSet;
             });
-            showSnackbar(errorMessage);
+            showSnackbar(`Failed to upload: ${file.name}`);
           }
         }
       } else if (messageContent) {
@@ -394,10 +764,26 @@ const WriterChat = () => {
           content: messageContent,
           sender: { _id: user._id, name: user.name, avatar: user.avatar },
           timestamp: new Date().toISOString(),
-          replyTo: replyToMessage,
+          replyTo: replyToMessage ? {
+            _id: replyToMessage._id || replyToMessage.id,
+            content: replyToMessage.content,
+            sender: replyToMessage.sender,
+            timestamp: replyToMessage.timestamp
+          } : null,
           isOptimistic: true
         };
-        setMessages(prev => [...prev, optimisticMessage]);
+
+        setMessages(prev => {
+          const updated = [...prev, optimisticMessage];
+          (async () => { 
+            try { 
+              if (currentChat?.id) {
+                await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); 
+              }
+            } catch (e) {} 
+          })();
+          return updated;
+        });
         setSendingMessages(prev => new Set([...prev, optimisticId]));
         scrollToBottom();
 
@@ -405,14 +791,22 @@ const WriterChat = () => {
           const realMessage = await sendChatMessage({
             chatId: currentChat.id,
             content: messageContent,
-            replyTo: replyToMessage?._id
+            replyTo: replyToMessage?._id || replyToMessage?.id
           });
+
           setMessages(prev => prev.map(msg => msg.id === optimisticId ? {
             ...realMessage,
             id: realMessage._id,
             isOptimistic: false,
-            replyTo: realMessage.replyTo || replyToMessage
+            // Preserve reply context from server or fallback to original
+            replyTo: realMessage.replyTo || (replyToMessage ? {
+              _id: replyToMessage._id || replyToMessage.id,
+              content: replyToMessage.content,
+              sender: replyToMessage.sender,
+              timestamp: replyToMessage.timestamp
+            } : null)
           } : msg));
+
           setSendingMessages(prev => {
             const newSet = new Set(prev);
             newSet.delete(optimisticId);
@@ -423,8 +817,15 @@ const WriterChat = () => {
             ...msg,
             content: `Failed to send: ${messageContent}`,
             sendError: true,
-            isOptimistic: false
+            isOptimistic: false,
+            replyTo: replyToMessage ? {
+              _id: replyToMessage._id || replyToMessage.id,
+              content: replyToMessage.content,
+              sender: replyToMessage.sender,
+              timestamp: replyToMessage.timestamp
+            } : null
           } : msg));
+
           setSendingMessages(prev => {
             const newSet = new Set(prev);
             newSet.delete(optimisticId);
@@ -451,18 +852,66 @@ const WriterChat = () => {
       router.setParams({ chatId: chat.id });
     }
     if (joinChat) joinChat(chat.id);
+    // Proactively mark as read on open
+    if (socket) {
+      try { socket.emit('markMessagesAsRead', { chatId: chat.id, userId: user._id }); } catch {}
+    }
   };
 
   // Message interaction handlers
   const handleReply = (message) => setReplyingTo(message);
   const cancelReply = () => setReplyingTo(null);
 
+  // keep index map up to date
+  useEffect(() => {
+    const map = new Map();
+    messages.forEach((m, idx) => {
+      const key = m.id || m._id;
+      if (key) map.set(key, idx);
+    });
+    messageIndexMapRef.current = map;
+  }, [messages]);
+
   const scrollToMessage = (messageId) => {
-    const index = messages.findIndex(m => m.id === messageId);
-    if (index !== -1) {
-      flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-      setHighlightedMessageId(messageId);
-      setTimeout(() => setHighlightedMessageId(null), 2000);
+    const index = messageIndexMapRef.current.get(messageId);
+    if (index !== -1 && flatListRef.current) {
+      try {
+        flatListRef.current.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.3, // Show message slightly above center
+          viewOffset: 20 // Add some offset for better visibility
+        });
+
+        // Highlight the message with animation
+        setHighlightedMessageId(messageId);
+
+        // Clear highlight after 3 seconds
+        setTimeout(() => {
+          setHighlightedMessageId(null);
+        }, 3000);
+
+        // Add a subtle flash animation
+        const highlightAnim = new Animated.Value(0);
+        Animated.sequence([
+          Animated.timing(highlightAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(highlightAnim, {
+            toValue: 0,
+            duration: 300,
+            delay: 1000,
+            useNativeDriver: true,
+          })
+        ]).start();
+
+      } catch (error) {
+        console.warn('Failed to scroll to message:', error);
+        // Fallback: scroll to bottom if scrollToIndex fails
+        scrollToBottom();
+      }
     }
   };
 
@@ -678,6 +1127,124 @@ const WriterChat = () => {
         }
       }, 2000);
     }
+  };
+
+  // WhatsApp-style swipe to reply with PanResponder + Animated for stability
+  const SwipeableMessage = ({ children, onSwipeReply, message }) => {
+    const translateX = useRef(new Animated.Value(0)).current;
+    const replied = useRef(false);
+    const replyIconOpacity = useRef(new Animated.Value(0)).current;
+    const replyIconScale = useRef(new Animated.Value(0.8)).current;
+
+    const resetPosition = () => {
+      Animated.parallel([
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 6,
+        }),
+        Animated.timing(replyIconOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(replyIconScale, {
+          toValue: 0.8,
+          useNativeDriver: true,
+        })
+      ]).start(() => {
+        replied.current = false;
+      });
+    };
+
+    const showReplyIcon = (progress) => {
+      const opacity = Math.min(progress / swipeThreshold, 1);
+      const scale = 0.8 + (opacity * 0.2);
+      replyIconOpacity.setValue(opacity);
+      replyIconScale.setValue(scale);
+    };
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          const { dx, dy } = gestureState;
+          return Math.abs(dx) > 10 && Math.abs(dy) < 20;
+        },
+        onPanResponderGrant: () => {
+          replied.current = false;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const { dx } = gestureState;
+          const clampedDx = Math.max(Math.min(dx, 120), -120);
+          translateX.setValue(clampedDx);
+
+          // Show reply icon with progress
+          showReplyIcon(Math.abs(dx));
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const { dx } = gestureState;
+
+          if (Math.abs(dx) > swipeThreshold && !replied.current) {
+            replied.current = true;
+            // Trigger haptic feedback if available
+            if (Platform.OS === 'ios') {
+              // Add haptic feedback for iOS
+            }
+            onSwipeReply?.(message);
+
+            // Animate to show success
+            Animated.sequence([
+              Animated.timing(replyIconOpacity, {
+                toValue: 1,
+                duration: 100,
+                useNativeDriver: true,
+              }),
+              Animated.timing(replyIconOpacity, {
+                toValue: 0,
+                duration: 300,
+                delay: 500,
+                useNativeDriver: true,
+              })
+            ]).start();
+          }
+
+          resetPosition();
+        },
+        onPanResponderTerminate: resetPosition,
+      })
+    ).current;
+
+    return (
+      <View style={{ position: 'relative' }}>
+        {/* Reply indicator that appears on swipe */}
+        <Animated.View
+          style={[
+            styles.replyIndicator,
+            {
+              opacity: replyIconOpacity,
+              transform: [{ scale: replyIconScale }],
+            }
+          ]}
+        >
+          <Icon name="reply" size={20} color="#22C55E" />
+          <Text style={styles.replyIndicatorText}>Reply</Text>
+        </Animated.View>
+
+        <Animated.View
+          style={{
+            transform: [{ translateX }],
+            backgroundColor: translateX.interpolate({
+              inputRange: [0, 80],
+              outputRange: ['transparent', 'rgba(34, 197, 94, 0.1)'],
+            }),
+          }}
+          {...panResponder.panHandlers}
+        >
+          {children}
+        </Animated.View>
+      </View>
+    );
   };
 
 
@@ -921,13 +1488,28 @@ const WriterChat = () => {
     }
   };
 
-  const handleAudioPlay = async (audioUrl) => {
+  const handleAudioPlay = async (audioUrl, messageId) => {
     try {
-      console.log('🎵 [WriterChat] Playing audio:', audioUrl);
+      console.log('🎵 [WriterChat] Audio action for:', audioUrl, messageId);
       
       if (!audioUrl) {
         showSnackbar('Audio URL not available');
         return;
+      }
+
+      // If currently playing this audio, pause it
+      if (playingAudioId === messageId && currentSound) {
+        await currentSound.pauseAsync();
+        setPlayingAudioId(null);
+        setCurrentSound(null);
+        showSnackbar('Audio paused');
+        return;
+      }
+
+      // If playing another audio, stop it first
+      if (currentSound) {
+        await currentSound.stopAsync();
+        await currentSound.unloadAsync();
       }
       
       // Set audio mode for playback
@@ -952,21 +1534,30 @@ const WriterChat = () => {
         }
       );
       
+      setCurrentSound(sound);
+      setPlayingAudioId(messageId);
+      
       // Track when audio finishes
       sound.setOnPlaybackStatusUpdate((status) => {
         if (status.didJustFinish) {
           sound.unloadAsync();
+          setPlayingAudioId(null);
+          setCurrentSound(null);
           console.log('🎵 [WriterChat] Audio playback finished');
         }
         if (status.error) {
           console.error('❌ [WriterChat] Audio playback error:', status.error);
           sound.unloadAsync();
+          setPlayingAudioId(null);
+          setCurrentSound(null);
         }
       });
       
       showSnackbar('Playing voice message');
     } catch (error) {
       console.error('❌ [WriterChat] Audio playback failed:', error);
+      setPlayingAudioId(null);
+      setCurrentSound(null);
       
       // Fallback: try to open audio URL directly
       try {
@@ -988,12 +1579,276 @@ const WriterChat = () => {
     }
   };
 
+  // Audio Call Functions
+  const requestCallPermissions = async () => {
+    try {
+      console.log('📞 [WriterChat] Requesting call permissions...');
+      
+      // Request microphone permission
+      const { status: micStatus } = await Audio.requestPermissionsAsync();
+      if (micStatus !== 'granted') {
+        throw new Error('Microphone permission denied');
+      }
+      
+      // Set audio mode for calls
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: true
+      });
+      
+      console.log('✅ [WriterChat] Call permissions granted');
+      return true;
+    } catch (error) {
+      console.error('❌ [WriterChat] Call permission error:', error);
+      Alert.alert('Permission Required', 'Microphone access is required for audio calls.');
+      return false;
+    }
+  };
+
+  const playRingtone = async () => {
+    try {
+      if (ringtoneSound) {
+        await ringtoneSound.unloadAsync();
+      }
+      
+      // Use a simple ringtone sound (you can replace with actual ringtone file)
+      const { sound } = await Audio.Sound.createAsync(
+        require('../../assets/live-the-moment-67986.mp3'), // Using existing audio file
+        { shouldPlay: true, isLooping: true, volume: 0.5 }
+      );
+      
+      setRingtoneSound(sound);
+    } catch (error) {
+      console.error('❌ [WriterChat] Ringtone error:', error);
+    }
+  };
+
+  const stopRingtone = async () => {
+    try {
+      if (ringtoneSound) {
+        await ringtoneSound.unloadAsync();
+        setRingtoneSound(null);
+      }
+    } catch (error) {
+      console.error('❌ [WriterChat] Stop ringtone error:', error);
+    }
+  };
+
+  const startCallTimer = () => {
+    const timer = setInterval(() => {
+      if (callStartTime) {
+        const duration = Math.floor((Date.now() - callStartTime) / 1000);
+        setCallDuration(duration);
+      }
+    }, 1000);
+    setCallTimer(timer);
+  };
+
+  const stopCallTimer = () => {
+    if (callTimer) {
+      clearInterval(callTimer);
+      setCallTimer(null);
+    }
+  };
+
+  const initiateCall = async (otherUser) => {
+    try {
+      console.log('📞 [WriterChat] Initiating call to:', otherUser.name);
+      
+      const hasPermissions = await requestCallPermissions();
+      if (!hasPermissions) return;
+      
+      const callId = `call_${Date.now()}_${user._id}`;
+
+      // Emit call initiation before navigating
+      if (socket) {
+        socket.emit('initiateCall', {
+          to: otherUser._id || otherUser.id,
+          from: user._id,
+          fromName: user.name,
+          fromAvatar: user.avatar,
+          chatId: currentChat?.id,
+          callId,
+          // Legacy keys
+          recipientId: otherUser._id || otherUser.id,
+          callerId: user._id,
+          callerName: user.name,
+          callerAvatar: user.avatar,
+        });
+      }
+
+      // Navigate to WebRTC audio call screen
+      router.push({
+        pathname: '/audio-call',
+        params: {
+          userId: otherUser._id || otherUser.id,
+          userName: otherUser.name,
+          userAvatar: otherUser.avatar,
+          isIncoming: 'false',
+          chatId: currentChat?.id,
+          callId
+        }
+      });
+      
+      showSnackbar(`Calling ${otherUser.name}...`);
+    } catch (error) {
+      console.error('❌ [WriterChat] Call initiation error:', error);
+      setCallState('failed');
+      Alert.alert('Call Failed', 'Unable to initiate call. Please try again.');
+    }
+  };
+
+  const acceptCall = async () => {
+    try {
+      console.log('📞 [WriterChat] Accepting call...');
+      
+      const hasPermissions = await requestCallPermissions();
+      if (!hasPermissions) return;
+      
+      setCallState('connected');
+      setCallStartTime(Date.now());
+      stopRingtone();
+      startCallTimer();
+      
+      // Start simulated audio streaming
+      startAudioStreaming();
+      
+      // Emit call accepted event
+      if (socket && incomingCall) {
+        socket.emit('callAccepted', {
+          callId: incomingCall.id,
+          recipientId: user._id,
+          timestamp: Date.now()
+        });
+      }
+      
+      showSnackbar('Call connected');
+    } catch (error) {
+      console.error('❌ [WriterChat] Call accept error:', error);
+      setCallState('failed');
+      Alert.alert('Call Failed', 'Unable to accept call. Please try again.');
+    }
+  };
+
+  const rejectCall = () => {
+    try {
+      console.log('📞 [WriterChat] Rejecting call...');
+      
+      setCallState('idle');
+      stopRingtone();
+      
+      // Emit call rejected event
+      if (socket && incomingCall) {
+        socket.emit('callRejected', {
+          callId: incomingCall.id,
+          recipientId: user._id
+        });
+      }
+      
+      setIncomingCall(null);
+      showSnackbar('Call rejected');
+    } catch (error) {
+      console.error('❌ [WriterChat] Call reject error:', error);
+    }
+  };
+
+  const endCall = () => {
+    try {
+      console.log('📞 [WriterChat] Ending call...');
+      
+      setCallState('idle');
+      setCallDuration(0);
+      setCallStartTime(null);
+      stopCallTimer();
+      stopRingtone();
+      stopAudioStreaming();
+      
+      // Emit call ended event
+      if (socket) {
+        socket.emit('callEnded', {
+          callId: incomingCall?.id || outgoingCall?.id,
+          userId: user._id,
+          timestamp: Date.now()
+        });
+      }
+      
+      setIncomingCall(null);
+      setOutgoingCall(null);
+      setIsMuted(false);
+      setIsSpeakerOn(false);
+      
+      showSnackbar('Call ended');
+    } catch (error) {
+      console.error('❌ [WriterChat] Call end error:', error);
+    }
+  };
+
+  const toggleMute = () => {
+    setIsMuted(prev => !prev);
+    showSnackbar(isMuted ? 'Microphone unmuted' : 'Microphone muted');
+  };
+
+  const toggleSpeaker = () => {
+    setIsSpeakerOn(prev => !prev);
+    showSnackbar(isSpeakerOn ? 'Speaker off' : 'Speaker on');
+  };
+
+  const formatCallDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Enhanced audio streaming simulation for real-time calls
+  const startAudioStreaming = async () => {
+    try {
+      console.log('🎵 [WriterChat] Starting audio streaming simulation...');
+      
+      // Set up audio mode for real-time streaming
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: true,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+      });
+
+      // Simulate real-time audio streaming
+      // In a real implementation, this would handle WebRTC audio streams
+      console.log('✅ [WriterChat] Audio streaming started');
+      
+    } catch (error) {
+      console.error('❌ [WriterChat] Audio streaming error:', error);
+    }
+  };
+
+  const stopAudioStreaming = () => {
+    try {
+      console.log('🎵 [WriterChat] Stopping audio streaming...');
+      // Clean up audio streaming resources
+      console.log('✅ [WriterChat] Audio streaming stopped');
+    } catch (error) {
+      console.error('❌ [WriterChat] Stop audio streaming error:', error);
+    }
+  };
+
   // Utility functions
-  const scrollToBottom = () => {
-    if (flatListRef.current && messages.length > 0) {
+  const scrollToBottom = (animated = true) => {
+    if (isMountedRef.current && flatListRef.current && messages.length > 0) {
       setTimeout(() => {
-        flatListRef.current.scrollToEnd({ animated: false });
-      }, 100);
+        try {
+          if (isMountedRef.current && flatListRef.current) {
+            flatListRef.current.scrollToEnd({ animated });
+          }
+        } catch (error) {
+          console.warn('Failed to scroll to bottom:', error);
+        }
+      }, animated ? 100 : 50);
     }
   };
 
@@ -1005,23 +1860,58 @@ const WriterChat = () => {
 
   const formatTime = (timestamp) => {
     try {
+      if (!timestamp) return '';
       const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return '';
       const now = new Date();
-      const diff = now - date;
-      
+      const diff = now.getTime() - date.getTime();
+
       if (diff < 60000) return 'Just now';
       if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-      if (diff < 86400000) return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (diff < 86400000) return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     } catch (error) {
-      return 'Now';
+      return '';
     }
   };
 
-  const formatCurrency = (amount) => {
+  const formatCurrency = (amount, agreement = null) => {
+    // Detect currency from agreement if available
+    let currency = 'USD';
+
+    if (agreement?.paymentPreferences) {
+      const prefs = agreement.paymentPreferences;
+
+      // Check for explicit currency setting
+      if (prefs.currency === 'ngn') {
+        currency = 'NGN';
+      }
+      // Check for Paystack gateway (typically NGN)
+      else if (prefs.gateway === 'paystack') {
+        currency = 'NGN';
+      }
+      // Check for native amount indicators
+      else if (prefs.nativeAmount && prefs.nativeAmount !== agreement.totalAmount && prefs.exchangeRate === 1) {
+        currency = 'NGN';
+      }
+      else if (prefs.nativeAmount && prefs.nativeAmount > 5000) {
+        currency = 'NGN';
+      }
+      // Default to explicit currency or USD
+      else {
+        currency = (prefs.currency || 'USD').toUpperCase();
+      }
+    }
+
+    console.log('💵 [WriterChat] Formatting currency:', {
+      amount,
+      currency,
+      agreementId: agreement?._id
+    });
+
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
-      currency: 'USD'
+      currency: currency
     }).format(amount);
   };
 
@@ -1089,7 +1979,7 @@ const WriterChat = () => {
             Student: {agreement.studentName}
           </Text>
           <Text style={styles.agreementAmount}>
-            {formatCurrency(agreement.amount)}
+            {formatCurrency(agreement.amount, agreement)}
           </Text>
         </View>
         
@@ -1183,24 +2073,41 @@ const WriterChat = () => {
     const isHighlighted = highlightedMessageId === message.id;
     const showAvatar = !isOwn && (index === messages.length - 1 || messages[index + 1]?.sender?._id !== message.sender?._id);
 
-    if (isOwn) {
-      // Own message - right aligned
-      return (
+    const MessageContent = () => (
+      <View style={[
+        styles.messageContainer,
+        isOwn ? styles.ownMessageContainer : styles.otherMessageContainer,
+        isHighlighted && styles.highlightedMessage
+      ]}>
+        {!isOwn && showAvatar && (
+          <Avatar.Image
+            size={32}
+            source={{
+              uri: message.sender?.avatar ||
+                   `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(message.sender?.name || 'User')}`
+            }}
+            style={styles.messageAvatar}
+          />
+        )}
+        
         <View style={[
-          styles.messageContainer,
-          styles.ownMessageContainer,
-          isHighlighted && styles.highlightedMessage
+          styles.messageBubble, 
+          isOwn ? styles.ownBubble : styles.otherBubble,
+          !isOwn && !showAvatar && { marginLeft: 40 }
         ]}>
-          <View style={[styles.messageBubble, styles.ownBubble]}>
           {message.replyTo && (
             <TouchableOpacity
               style={styles.replyPreview}
               onPress={() => scrollToMessage(message.replyTo._id)}
             >
               <View style={styles.replyBar} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.replyAuthor}>{message.replyTo.sender?.name}</Text>
-                <Text style={styles.replyText} numberOfLines={2}>{message.replyTo.content}</Text>
+              <View style={{ flex: 1, flexShrink: 1 }}>
+                <Text style={[styles.replyAuthor, { color: isOwn ? 'rgba(255,255,255,0.9)' : '#1F2937' }]} numberOfLines={1}>
+                  {message.replyTo.sender?.name}
+                </Text>
+                <Text style={[styles.replyText, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#6B7280' }]} numberOfLines={2}>
+                  {message.replyTo.content}
+                </Text>
               </View>
             </TouchableOpacity>
           )}
@@ -1212,9 +2119,13 @@ const WriterChat = () => {
                   <Image source={{ uri: message.fileUrl }} style={styles.messageImage} resizeMode="cover" />
                 </TouchableOpacity>
               ) : message.fileType?.startsWith('audio/') ? (
-                <TouchableOpacity style={styles.audioContainer} onPress={() => handleAudioPlay(message.fileUrl)}>
+                <TouchableOpacity style={styles.audioContainer} onPress={() => handleAudioPlay(message.fileUrl, message.id)}>
                   <View style={styles.audioPlay}>
-                    <Text style={{ color: 'white', fontSize: 14 }}>▶</Text>
+                    <Icon 
+                      name={playingAudioId === message.id ? "pause" : "play"} 
+                      size={16} 
+                      color="white" 
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[styles.audioTitle, { color: isOwn ? 'white' : '#1F2937' }]}>Voice message</Text>
@@ -1225,7 +2136,7 @@ const WriterChat = () => {
                     )}
                   </View>
                   <TouchableOpacity style={{ padding: 4 }} onPress={() => handleFileDownload(message.fileUrl, message.fileName)}>
-                    <Text style={{ color: isOwn ? 'rgba(255,255,255,0.8)' : '#667EEA', fontSize: 18 }}>⬇</Text>
+                    <Icon name="download" size={16} color={isOwn ? 'rgba(255,255,255,0.8)' : '#667EEA'} />
                   </TouchableOpacity>
                 </TouchableOpacity>
               ) : (
@@ -1242,7 +2153,7 @@ const WriterChat = () => {
                     </Text>
                   </View>
                   <TouchableOpacity style={{ padding: 4 }} onPress={() => handleFileDownload(message.fileUrl, message.fileName)}>
-                    <Text style={{ color: isOwn ? 'rgba(255,255,255,0.8)' : '#667EEA', fontSize: 16 }}>⬇</Text>
+                    <Icon name="download" size={16} color={isOwn ? 'rgba(255,255,255,0.8)' : '#667EEA'} />
                   </TouchableOpacity>
                 </TouchableOpacity>
               )}
@@ -1263,128 +2174,32 @@ const WriterChat = () => {
             </Text>
           )}
 
-          <View style={styles.messageFooterRow}>
+          <View style={styles.messageFooter}>
             <Text style={[styles.messageTime, isOwn ? styles.ownMessageTime : styles.otherMessageTime]}>
-              {formatTime(message.timestamp)}
+              {formatTime(message.timestamp) || ' '}
             </Text>
-            {renderMessageStatus(message)}
+            {isOwn && renderMessageStatus(message)}
           </View>
         </View>
 
-        <TouchableOpacity style={{ padding: 8, opacity: 0.6 }} onPress={() => handleReply(message)}>
-          <Text style={{ color: '#9CA3AF', fontSize: 12 }}>↩</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  } else {
-    // Other's message - left aligned with avatar
-    return (
-      <View style={[
-        styles.messageContainer,
-        styles.otherMessageContainer,
-        isHighlighted && styles.highlightedMessage
-      ]}>
-        {showAvatar && (
-          <Avatar.Image
-            size={28}
-            source={{
-              uri: message.sender?.avatar ||
-                   `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(message.sender?.name || 'User')}`
-            }}
-            style={styles.messageAvatar}
-          />
+        {!isOwn && (
+          <TouchableOpacity style={styles.replyButton} onPress={() => handleReply(message)}>
+            <Icon name="reply" size={14} color="#9CA3AF" />
+          </TouchableOpacity>
         )}
-        
-        <View style={[
-          styles.messageBubble,
-          styles.otherBubble,
-          !showAvatar && { marginLeft: 36 }
-        ]}>
-          {message.replyTo && (
-            <TouchableOpacity
-              style={styles.replyPreview}
-              onPress={() => scrollToMessage(message.replyTo._id)}
-            >
-              <View style={styles.replyBar} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.replyAuthor}>{message.replyTo.sender?.name}</Text>
-                <Text style={styles.replyText} numberOfLines={2}>{message.replyTo.content}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
-
-          {message.fileUrl ? (
-            <View>
-              {message.fileType?.startsWith('image/') ? (
-                <TouchableOpacity onPress={() => Linking.openURL(message.fileUrl)}>
-                  <Image source={{ uri: message.fileUrl }} style={styles.messageImage} resizeMode="cover" />
-                </TouchableOpacity>
-              ) : message.fileType?.startsWith('audio/') ? (
-                <TouchableOpacity style={styles.audioContainer} onPress={() => handleAudioPlay(message.fileUrl)}>
-                  <View style={styles.audioPlay}>
-                    <Text style={{ color: 'white', fontSize: 14 }}>▶</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.audioTitle, { color: '#1F2937' }]}>Voice message</Text>
-                    {message.voiceDuration && (
-                      <Text style={[styles.audioDuration, { color: '#6B7280' }]}>
-                        {Math.floor(message.voiceDuration / 60)}:{(message.voiceDuration % 60).toString().padStart(2, '0')}
-                      </Text>
-                    )}
-                  </View>
-                  <TouchableOpacity style={{ padding: 4 }} onPress={() => handleFileDownload(message.fileUrl, message.fileName)}>
-                    <Text style={{ color: '#667EEA', fontSize: 18 }}>⬇</Text>
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity style={styles.documentRow} onPress={() => handleFileDownload(message.fileUrl, message.fileName)}>
-                  <View style={styles.documentIcon}>
-                    <Text style={{ color: 'white', fontSize: 18 }}>{getFileIcon(message.fileName)}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[styles.documentName, { color: '#1F2937' }]} numberOfLines={1}>
-                      {message.fileName || 'Unknown file'}
-                    </Text>
-                    <Text style={[styles.documentMeta, { color: '#6B7280' }]}>
-                      {message.fileSize ? `${(message.fileSize / 1024 / 1024).toFixed(1)}MB` : 'File'} • {getFileExtension(message.fileName)}
-                    </Text>
-                  </View>
-                  <TouchableOpacity style={{ padding: 4 }} onPress={() => handleFileDownload(message.fileUrl, message.fileName)}>
-                    <Text style={{ color: '#667EEA', fontSize: 16 }}>⬇</Text>
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              )}
-
-              {message.content ? (
-                <Text style={[
-                  styles.messageText,
-                  styles.otherMessageText,
-                  { marginTop: 8 }
-                ]}>
-                  {message.content}
-                </Text>
-              ) : null}
-            </View>
-          ) : (
-            <Text style={[styles.messageText, styles.otherMessageText]}>
-              {message.content}
-            </Text>
-          )}
-
-          <View style={styles.messageFooterRow}>
-            <Text style={[styles.messageTime, styles.otherMessageTime]}>
-              {formatTime(message.timestamp)}
-            </Text>
-          </View>
-        </View>
-
-        <TouchableOpacity style={{ padding: 8, opacity: 0.6 }} onPress={() => handleReply(message)}>
-          <Text style={{ color: '#9CA3AF', fontSize: 12 }}>↩</Text>
-        </TouchableOpacity>
       </View>
     );
-  }
-};
+
+    // Wrap in swipeable for reply functionality
+    return (
+      <SwipeableMessage
+        message={message}
+        onSwipeReply={handleReply}
+      >
+        <MessageContent />
+      </SwipeableMessage>
+    );
+  };
 
   const renderMainList = () => {
     if (activeTab === 'chats') {
@@ -1402,7 +2217,7 @@ const WriterChat = () => {
             <FlatList
               data={chats}
               renderItem={renderChatListItem}
-              keyExtractor={(item) => item.id}
+              keyExtractor={(item, index) => `${String(item._id || item.id || item.chatId || (item?.otherParticipant && (item?.otherParticipant?._id || item?.otherParticipant?.id)) || 'chat')}-${index}`}
               style={styles.list}
               showsVerticalScrollIndicator={false}
             />
@@ -1425,7 +2240,7 @@ const WriterChat = () => {
           <FlatList
             data={agreements}
             renderItem={renderAgreementItem}
-            keyExtractor={(item) => item.id}
+            keyExtractor={(item, index) => `${String(item._id || item.id || item.agreementId || 'agreement')}-${index}`}
             style={styles.list}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.agreementsList}
@@ -1469,18 +2284,18 @@ const WriterChat = () => {
 
   const renderChatView = () => (
     <View style={styles.chatContainer}>
-      {/* Chat Header */}
+      {/* Professional Chat Header */}
       <LinearGradient colors={['#015382', '#017DB0']} style={styles.chatHeader}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => setShowChatList(true)}
         >
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Icon name="arrow-left" size={24} color="white" />
         </TouchableOpacity>
         
         <View style={styles.chatHeaderInfo}>
           <Avatar.Image
-            size={40}
+            size={42}
             source={{
               uri: currentChat?.otherParticipant?.avatar ||
                    `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentChat?.otherParticipant?.name || 'User')}`
@@ -1490,10 +2305,29 @@ const WriterChat = () => {
             <Text style={styles.headerName}>
               {currentChat?.otherParticipant?.name || 'Unknown User'}
             </Text>
-            <Text style={styles.headerStatus}>
-              {currentChat?.otherParticipant?.isOnline ? 'Online' : 'Offline'}
-            </Text>
+            <View style={styles.statusContainer}>
+              {otherUserTyping ? (
+                <Text style={styles.typingText}>typing...</Text>
+              ) : (
+                <Text style={styles.headerStatus}>
+                  {onlineUsers.has(currentChat?.otherParticipant?._id) ? 'Online' : 'Offline'}
+                </Text>
+              )}
+            </View>
           </View>
+        </View>
+
+        <View style={styles.headerActions}>
+          <TouchableOpacity 
+            style={styles.headerActionButton}
+            onPress={() => initiateCall(currentChat?.otherParticipant)}
+            disabled={callState !== 'idle' || !currentChat?.otherParticipant}
+          >
+            <Icon name="phone" size={20} color="white" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.headerActionButton}>
+            <Icon name="dots-vertical" size={20} color="white" />
+          </TouchableOpacity>
         </View>
       </LinearGradient>
 
@@ -1540,9 +2374,14 @@ const WriterChat = () => {
 
       {/* Messages */}
       <View style={styles.messagesContainer}>
-        {messages.length === 0 ? (
+        {loadingMessages ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#015382" />
+            <Text style={styles.loadingText}>Loading messages...</Text>
+          </View>
+        ) : messages.length === 0 ? (
           <View style={styles.emptyMessages}>
-            <Text style={styles.emptyMessagesIcon}>💭</Text>
+            <Icon name="message-outline" size={48} color="#D1D5DB" />
             <Text style={styles.emptyMessagesText}>
               Start the conversation with {currentChat?.otherParticipant?.name}
             </Text>
@@ -1552,27 +2391,64 @@ const WriterChat = () => {
             ref={flatListRef}
             data={messages}
             renderItem={renderMessage}
-            keyExtractor={(item) => item.id}
-            style={styles.messagesList}
-            onContentSizeChange={scrollToBottom}
-            onLayout={scrollToBottom}
+            keyExtractor={(item, index) => `${String(item._id || item.id || item.messageId || item.timestamp || 'msg')}-${index}`}
+            contentContainerStyle={[styles.messagesList, { paddingBottom: 24 }]}
+            onContentSizeChange={() => scrollToBottom(true)}
+            onLayout={() => scrollToBottom(true)}
             showsVerticalScrollIndicator={false}
+            onScrollToIndexFailed={(info) => {
+              try {
+                const wait = new Promise(resolve => setTimeout(resolve, 300));
+                wait.then(() => {
+                  if (flatListRef.current) {
+                    flatListRef.current.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index), animated: true });
+                  }
+                });
+              } catch (e) {}
+            }}
+            getItemLayout={(_, index) => ({ length: 72, offset: 72 * index, index })}
             onScroll={(e) => {
               const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
               const isAtBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 50;
               setShowScrollToBottom(!isAtBottom);
             }}
+            removeClippedSubviews={false}
+            maxToRenderPerBatch={15}
+            windowSize={15}
+            initialNumToRender={25}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 0,
+              autoscrollToTopThreshold: 10
+            }}
+            keyboardDismissMode="interactive"
+            keyboardShouldPersistTaps="handled"
           />
+        )}
+        
+        {/* Typing Indicator */}
+        {otherUserTyping && (
+          <View style={styles.typingIndicator}>
+            <Avatar.Image
+              size={24}
+              source={{
+                uri: currentChat?.otherParticipant?.avatar ||
+                     `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(currentChat?.otherParticipant?.name || 'User')}`
+              }}
+            />
+            <View style={styles.typingBubble}>
+              <Text style={styles.typingDotsText}>•••</Text>
+            </View>
+          </View>
         )}
       </View>
 
       {/* Reply Banner */}
       {replyingTo && (
         <View style={styles.replyBanner}>
-          <View style={{ flex: 1 }}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => scrollToMessage(replyingTo.id || replyingTo._id)}>
             <Text style={styles.replyBannerTitle}>Replying to {replyingTo.sender?.name}</Text>
             <Text style={styles.replyBannerText} numberOfLines={1}>{replyingTo.content}</Text>
-          </View>
+          </TouchableOpacity>
           <TouchableOpacity onPress={cancelReply}>
             <Text style={{ color: '#6B7280' }}>✕</Text>
           </TouchableOpacity>
@@ -1607,37 +2483,57 @@ const WriterChat = () => {
         </View>
       )}
 
-      {/* Input Area */}
-      <View style={styles.inputContainer}>
-        <View style={styles.inputWrapper}>
+      {/* Professional Input Area */}
+      <View style={[styles.inputContainer, { paddingBottom: keyboardHeight > 0 ? 5 : 20 }]}>
+        <View style={styles.inputRow}>
           <TouchableOpacity
+            style={styles.attachButton}
             onPress={() => handleFileSelect('document')}
-            style={{ padding: 6, marginRight: 4 }}
           >
-            <Text style={{ fontSize: 22, color: '#667EEA' }}>📎</Text>
+            <Icon name="attachment" size={18} color="#667EEA" />
           </TouchableOpacity>
-          <TextInput
-            value={messageText}
-            onChangeText={handleTypingChange}
-            placeholder="Type a message..."
-            style={styles.textInput}
-            multiline
-            maxLength={500}
-            returnKeyType="send"
-          />
+
+          <View style={styles.textInputContainer}>
+            <RNTextInput
+              value={messageText}
+              onChangeText={handleTypingChange}
+              placeholder="Type a message..."
+              multiline
+              style={styles.textInput}
+              placeholderTextColor="#9CA3AF"
+              maxLength={1000}
+              textAlignVertical="top"
+            />
+          </View>
+
           {isRecording ? (
-            <TouchableOpacity onPress={stopRecording} style={styles.recordingButton}>
-              <Text style={{ color: 'white', fontWeight: '700' }}>
-                ■ {Math.floor(recordingDuration/60)}:{(recordingDuration%60).toString().padStart(2,'0')}
+            <TouchableOpacity
+              style={styles.recordingButton}
+              onPress={stopRecording}
+            >
+              <Icon name="stop" size={18} color="white" />
+              <Text style={styles.recordingTime}>
+                {Math.floor(recordingDuration / 60)}:{(recordingDuration % 60).toString().padStart(2, '0')}
               </Text>
             </TouchableOpacity>
-          ) : (messageText.trim() || selectedFiles.length > 0) ? (
-            <TouchableOpacity onPress={handleSendMessage} disabled={sending} style={styles.sendFab}>
-              <Text style={{ color: 'white', fontSize: 16 }}>➤</Text>
+          ) : messageText.trim() || selectedFiles.length > 0 ? (
+            <TouchableOpacity
+              style={styles.sendButton}
+              onPress={handleSendMessage}
+              disabled={sending}
+            >
+              {sending ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Icon name="send" size={16} color="white" />
+              )}
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity onPress={startRecording} style={styles.micButton}>
-              <Text style={{ fontSize: 20, color: '#667EEA' }}>🎤</Text>
+            <TouchableOpacity
+              style={styles.micButton}
+              onPress={startRecording}
+            >
+              <Icon name="microphone" size={16} color="#22C55E" />
             </TouchableOpacity>
           )}
         </View>
@@ -1647,6 +2543,89 @@ const WriterChat = () => {
         <TouchableOpacity style={styles.scrollToBottomButton} onPress={scrollToBottom}>
           <Text style={{ color: 'white', fontSize: 18 }}>⌄</Text>
         </TouchableOpacity>
+      )}
+
+      {/* Audio Call UI */}
+      {callState !== 'idle' && (
+        <View style={styles.callContainer}>
+          <LinearGradient colors={['#1F2937', '#374151']} style={styles.callHeader}>
+            <View style={styles.callInfo}>
+              <Avatar.Image
+                size={60}
+                source={{
+                  uri: incomingCall?.callerAvatar || outgoingCall?.recipientAvatar ||
+                       `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(
+                         incomingCall?.callerName || outgoingCall?.recipientName || 'User'
+                       )}`
+                }}
+              />
+              <View style={styles.callDetails}>
+                <Text style={styles.callName}>
+                  {incomingCall?.callerName || outgoingCall?.recipientName || 'Unknown User'}
+                </Text>
+                <Text style={styles.callStatus}>
+                  {callState === 'calling' && 'Calling...'}
+                  {callState === 'ringing' && 'Incoming call'}
+                  {callState === 'connected' && `Connected • ${formatCallDuration(callDuration)}`}
+                  {callState === 'ended' && 'Call ended'}
+                  {callState === 'failed' && 'Call failed'}
+                </Text>
+                {callQuality !== 'good' && callState === 'connected' && (
+                  <Text style={styles.callQuality}>
+                    Call quality: {callQuality}
+                  </Text>
+                )}
+              </View>
+            </View>
+          </LinearGradient>
+
+          <View style={styles.callControls}>
+            {callState === 'ringing' && (
+              <>
+                <TouchableOpacity style={styles.rejectButton} onPress={rejectCall}>
+                  <Icon name="phone-hangup" size={24} color="white" />
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.acceptButton} onPress={acceptCall}>
+                  <Icon name="phone" size={24} color="white" />
+                </TouchableOpacity>
+              </>
+            )}
+
+            {callState === 'calling' && (
+              <TouchableOpacity style={styles.endCallButton} onPress={endCall}>
+                <Icon name="phone-hangup" size={24} color="white" />
+              </TouchableOpacity>
+            )}
+
+            {callState === 'connected' && (
+              <>
+                <TouchableOpacity 
+                  style={[styles.callControlButton, isMuted && styles.callControlButtonActive]} 
+                  onPress={toggleMute}
+                >
+                  <Icon name={isMuted ? "microphone-off" : "microphone"} size={20} color="white" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.callControlButton, isSpeakerOn && styles.callControlButtonActive]} 
+                  onPress={toggleSpeaker}
+                >
+                  <Icon name={isSpeakerOn ? "volume-high" : "volume-low"} size={20} color="white" />
+                </TouchableOpacity>
+                
+                <TouchableOpacity style={styles.endCallButton} onPress={endCall}>
+                  <Icon name="phone-hangup" size={24} color="white" />
+                </TouchableOpacity>
+              </>
+            )}
+
+            {(callState === 'ended' || callState === 'failed') && (
+              <TouchableOpacity style={styles.closeCallButton} onPress={endCall}>
+                <Icon name="close" size={24} color="white" />
+              </TouchableOpacity>
+            )}
+          </View>
+        </View>
       )}
     </View>
   );
@@ -1665,8 +2644,10 @@ const WriterChat = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#015382" />
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 64 : 0}
         style={styles.container}
       >
         {showChatList ? renderMainView() : renderChatView()}
@@ -1704,17 +2685,18 @@ const WriterChat = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F8FAFC',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#F8FAFC',
   },
   loadingText: {
-    marginTop: 15,
+    marginTop: 16,
     fontSize: 16,
-    color: '#64748b',
+    color: '#64748B',
     fontWeight: '500',
   },
   
@@ -1946,7 +2928,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8fafc',
   },
   messagesList: {
-    flex: 1,
     paddingHorizontal: 15,
     paddingVertical: 10,
   },
@@ -1954,6 +2935,42 @@ const styles = StyleSheet.create({
     marginVertical: 6,
     marginHorizontal: 12,
     alignItems: 'flex-end',
+  },
+
+  // Reply Styles
+  replyContainer: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#22C55E',
+    alignSelf: 'stretch',
+    maxWidth: '90%',
+    flexShrink: 1,
+  },
+  replyBar: {
+    width: 3,
+    backgroundColor: '#22C55E',
+    borderRadius: 1.5,
+    marginRight: 8,
+  },
+  replyContent: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0, // Allow text to wrap properly
+  },
+  replyAuthor: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  replyText: {
+    fontSize: 13,
+    lineHeight: 16,
+    flexShrink: 1,
   },
   ownMessageContainer: {
     alignSelf: 'flex-end',
@@ -1974,6 +2991,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
     maxWidth: '100%',
+    flexShrink: 1,
   },
   highlightedMessage: {
     backgroundColor: 'rgba(102, 126, 234, 0.1)',
@@ -2072,7 +3090,7 @@ const styles = StyleSheet.create({
   documentMeta: { 
     fontSize: 12 
   },
-  messageFooterRow: { 
+  messageFooter: { 
     flexDirection: 'row', 
     alignItems: 'center', 
     marginTop: 6 
@@ -2081,9 +3099,12 @@ const styles = StyleSheet.create({
   replyPreview: {
     flexDirection: 'row', 
     marginBottom: 8, 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
+    backgroundColor: 'rgba(34,197,94,0.10)', 
     borderRadius: 8, 
-    padding: 8
+    padding: 8,
+    alignSelf: 'stretch',
+    flexShrink: 1,
+    minWidth: width * 0.5
   },
   replyBar: { 
     width: 3, 
@@ -2130,15 +3151,14 @@ const styles = StyleSheet.create({
     maxHeight: 120,
   },
   textInput: {
-    flex: 1,
     fontSize: 14,
-    maxHeight: 96,
-    backgroundColor: 'transparent',
-    paddingVertical: 6,
-    minHeight: 24,
     color: '#1f2937',
     textAlignVertical: 'top',
     lineHeight: 18,
+    paddingVertical: 6,
+    minHeight: 24,
+    maxHeight: 96,
+    backgroundColor: 'transparent',
   },
   sendFab: { 
     backgroundColor: '#015382', 
@@ -2167,11 +3187,18 @@ const styles = StyleSheet.create({
     borderColor: '#bbf7d0',
   },
   recordingButton: { 
-    backgroundColor: '#EF4444', 
-    margin: 6, 
-    borderRadius: 18, 
-    paddingHorizontal: 12, 
-    paddingVertical: 8 
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 24,
+    gap: 8,
+    elevation: 4,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
   },
   scrollToBottomButton: { 
     position: 'absolute', 
@@ -2185,15 +3212,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center' 
   },
 
+  // Reply indicator styles for swipe gesture
+  replyIndicator: {
+    position: 'absolute',
+    left: -60,
+    top: '50%',
+    transform: [{ translateY: -15 }],
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#22C55E',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+    zIndex: 10,
+    elevation: 5,
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  replyIndicatorText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+
   // Reply Banner & Files Preview
-  replyBanner: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F0F9FF', 
-    paddingHorizontal: 16, 
-    paddingVertical: 12, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#E2E8F0' 
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0'
   },
   replyBannerTitle: { 
     fontSize: 12, 
@@ -2267,8 +3320,235 @@ const styles = StyleSheet.create({
   },
   emptyMessagesText: {
     fontSize: 16,
-    color: '#64748b',
+    color: '#64748B',
     textAlign: 'center',
+    marginTop: 16,
+  },
+  
+  // Professional Chat Styles
+  chatContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  chatHeaderInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  headerTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  headerName: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: 'white',
+    letterSpacing: -0.3,
+  },
+  statusContainer: {
+    marginTop: 2,
+  },
+  headerStatus: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '500',
+  },
+  typingText: {
+    fontSize: 12,
+    color: '#22C55E',
+    fontWeight: '600',
+    fontStyle: 'italic',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  
+  // Professional Input Styles
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    paddingHorizontal: 4,
+  },
+  attachButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#f8fafc',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  textInputContainer: {
+    flex: 1,
+    backgroundColor: '#f8fafc',
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    maxHeight: 120,
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  sendButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#015382',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 2,
+    shadowColor: '#015382',
+    shadowOffset: {
+      width: 0,
+      height: 1,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+  },
+  recordingTime: {
+    color: 'white',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  
+  // Typing Indicator
+  typingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  typingBubble: {
+    backgroundColor: 'white',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 12,
+    elevation: 1,
+  },
+  typingDotsText: {
+    fontSize: 16,
+    color: '#6B7280',
+    fontWeight: 'bold',
+  },
+  
+  // Audio Call Styles
+  callContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#1F2937',
+    zIndex: 1000,
+  },
+  callHeader: {
+    paddingTop: Platform.OS === 'ios' ? 60 : 40,
+    paddingBottom: 40,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+  },
+  callInfo: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  callDetails: {
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  callName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: 'white',
+    marginBottom: 8,
+  },
+  callStatus: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.8)',
+    marginBottom: 4,
+  },
+  callQuality: {
+    fontSize: 14,
+    color: '#F59E0B',
+    fontWeight: '500',
+  },
+  callControls: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+    gap: 30,
+  },
+  callControlButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  callControlButtonActive: {
+    backgroundColor: '#3B82F6',
+  },
+  acceptButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#10B981',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#10B981',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  rejectButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  endCallButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+    shadowColor: '#EF4444',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  closeCallButton: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

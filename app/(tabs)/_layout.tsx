@@ -8,12 +8,14 @@ import TabBarBackground from '@/components/ui/TabBarBackground';
 import { Colors } from '@/constants/Colors';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { useAuth } from '@/src/context/MobileAuthContext';
+import { useTabVisibility } from '@/src/context/TabVisibilityContext';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
   const colors = Colors[colorScheme ?? 'light'];
   const isDark = colorScheme === 'dark';
   const { isAuthenticated, loading, user } = useAuth();
+  const { isTabBarVisible } = useTabVisibility();
 
   if (loading) {
     return (
@@ -36,7 +38,7 @@ export default function TabLayout() {
         // Wrap to avoid type incompatibility between different @react-navigation versions
         tabBarButton: (props) => <HapticTab {...(props as any)} />,
         tabBarBackground: TabBarBackground,
-        tabBarStyle: {
+        tabBarStyle: isTabBarVisible ? {
           ...Platform.select({
             ios: {
               position: 'absolute',
@@ -58,6 +60,12 @@ export default function TabLayout() {
           shadowOffset: { width: 0, height: -4 },
           shadowOpacity: isDark ? 0.5 : 0.1,
           shadowRadius: 16,
+        } : {
+          display: 'none',
+          height: 0,
+          opacity: 0,
+          position: 'absolute',
+          bottom: -100,
         },
         tabBarLabelStyle: {
           fontSize: 12,

@@ -1,4 +1,5 @@
 import { NavigationContainer } from '@react-navigation/native';
+import { useFonts } from 'expo-font';
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -32,6 +33,20 @@ const AppNavigationContainer = () => {
 
 // Root component with all providers
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    'Inter-Regular': require('./assets/fonts/Inter-Regular.ttf'),
+    'Inter-Medium': require('./assets/fonts/Inter-Medium.ttf'),
+    'Inter-Bold': require('./assets/fonts/Inter-Bold.ttf'),
+    'Roboto-Regular': require('./assets/fonts/Roboto-Regular.ttf'),
+    'Roboto-Medium': require('./assets/fonts/Roboto-Medium.ttf'),
+    'Roboto-Bold': require('./assets/fonts/Roboto-Bold.ttf'),
+    'SpaceMono-Regular': require('./assets/fonts/SpaceMono-Regular.ttf'),
+  });
+
+  if (!fontsLoaded) {
+    return <AppLoader />;
+  }
+
   return (
     <SafeAreaProvider>
       <PaperProvider theme={theme}>

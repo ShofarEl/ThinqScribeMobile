@@ -6,6 +6,7 @@ import { Stack } from 'expo-router';
 import { PaperProvider } from 'react-native-paper';
 import Toast from 'react-native-toast-message';
 import { AuthProvider } from '../src/context/MobileAuthContext';
+import { TabVisibilityProvider } from '../src/context/TabVisibilityContext';
 import { theme } from '../src/styles/theme';
 
 export default function RootLayout() {
@@ -29,6 +30,7 @@ export default function RootLayout() {
         <AppLoadingProvider>
           <NotificationProvider>
             <SocketProvider>
+              <TabVisibilityProvider>
               <Stack 
                 screenOptions={{ 
                   headerShown: false,
@@ -62,6 +64,7 @@ export default function RootLayout() {
                 <Stack.Screen name="[...missing]" />
               </Stack>
               <Toast />
+              </TabVisibilityProvider>
             </SocketProvider>
           </NotificationProvider>
         </AppLoadingProvider>

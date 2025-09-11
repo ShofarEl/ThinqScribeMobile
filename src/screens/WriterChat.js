@@ -1,36 +1,39 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Dimensions,
-    FlatList,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Linking,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Linking,
+  PanResponder,
+  Platform,
+  TextInput as RNTextInput,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import {
-    ActivityIndicator,
-    Avatar,
-    Badge,
-    Button,
-    Card,
-    Chip,
-    Searchbar,
-    Snackbar,
-    TextInput
+  ActivityIndicator,
+  Avatar,
+  Badge,
+  Button,
+  Card,
+  Chip,
+  Searchbar,
+  Snackbar
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -47,6 +50,7 @@ const { width, height } = Dimensions.get('window');
 const WriterChat = () => {
   const { chatId } = useLocalSearchParams();
   const router = useRouter();
+  const navigation = useNavigation();
   const { user } = useAuth();
   const { setLoading: setGlobalLoading } = useAppLoading();
   const { socket, joinChat, leaveChat, sendTypingIndicator } = useSocket() || {};
@@ -84,7 +88,82 @@ const WriterChat = () => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [currentSound, setCurrentSound] = useState(null);
-  const [swipeThreshold] = useState(80);
+  const [swipeThreshold] = useState(64);
+  const messageIndexMapRef = useRef(new Map());
+
+  const normalizeMessages = (msgs) => {
+    try {
+      const arr = Array.isArray(msgs) ? msgs : [];
+      const messageMap = new Map();
+      
+      // First pass: create a map of all messages for reference lookup
+      arr.forEach(msg => {
+        const key = msg._id || msg.id;
+        if (key) {
+          messageMap.set(key, msg);
+        }
+      });
+      
+      return arr.map(m => {
+        // Ensure basic message structure
+        const normalizedMessage = {
+          id: m._id || m.id,
+          content: m.content || m.message || '',
+          sender: m.sender || { _id: '', name: 'Unknown', avatar: null },
+          timestamp: m.timestamp || m.createdAt || new Date().toISOString(),
+          fileUrl: m.fileUrl,
+          fileName: m.fileName,
+          fileType: m.fileType,
+          fileSize: m.fileSize,
+          voiceDuration: m.voiceDuration,
+          read: m.read || false,
+          chatId: m.chatId,
+          isFromServer: m.isFromServer || false,
+          replyTo: null // Initialize as null
+        };
+
+        // Handle replyTo properly
+        if (m.replyTo) {
+          const replyTo = m.replyTo;
+          
+          // Case 1: replyTo is just a string ID
+          if (typeof replyTo === 'string') {
+            const referencedMessage = messageMap.get(replyTo);
+            if (referencedMessage) {
+              normalizedMessage.replyTo = {
+                _id: referencedMessage._id || referencedMessage.id,
+                content: referencedMessage.content || referencedMessage.message || 'Message not available',
+                sender: referencedMessage.sender || { _id: '', name: 'Unknown', avatar: null },
+                timestamp: referencedMessage.timestamp || referencedMessage.createdAt || null
+              };
+            } else {
+              // Create placeholder for missing message
+              normalizedMessage.replyTo = { 
+                _id: replyTo, 
+                content: 'Message not available', 
+                sender: { _id: '', name: 'Unknown', avatar: null },
+                timestamp: null
+              };
+            }
+          }
+          // Case 2: replyTo is already an object
+          else if (typeof replyTo === 'object' && replyTo !== null) {
+            normalizedMessage.replyTo = {
+              _id: replyTo._id || replyTo.id || replyTo,
+              content: replyTo.content || replyTo.message || 'Message not available',
+              sender: replyTo.sender || { _id: '', name: 'Unknown', avatar: null },
+              timestamp: replyTo.timestamp || replyTo.createdAt || null
+            };
+          }
+        }
+
+        return normalizedMessage;
+      });
+    } catch (error) {
+      console.warn('❌ [WriterChat] Error normalizing messages:', error);
+      return Array.isArray(msgs) ? msgs : [];
+    }
+  };
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   
   // Audio Call States
@@ -112,6 +191,7 @@ const WriterChat = () => {
   const typingTimeoutRef = useRef(null);
   const scrollOffsetRef = useRef(0);
 
+
   // Initial data loading
   useEffect(() => {
     StatusBar.setBarStyle('light-content', true);
@@ -119,7 +199,23 @@ const WriterChat = () => {
     fetchAgreements();
     
     if (chatId) {
-      fetchMessages(chatId);
+      (async () => {
+        try {
+          const cached = await AsyncStorage.getItem(`chat_messages_${chatId}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length) {
+              // Re-normalize cached messages to ensure proper structure
+              const reNormalized = normalizeMessages(parsed);
+              setMessages(reNormalized);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to load cached messages:', e);
+        }
+        // Always fetch fresh messages after loading cache
+        fetchMessages(chatId);
+      })();
       setShowChatList(false);
     }
 
@@ -146,6 +242,7 @@ const WriterChat = () => {
     };
   }, [chatId]);
 
+
   // Cleanup effect
   useEffect(() => {
     return () => {
@@ -161,35 +258,76 @@ const WriterChat = () => {
 
     const handleReceiveMessage = (data) => {
       try {
-        if (!data || !data.message) return;
+        console.log('📨 [WriterChat] Received message:', data);
+
+        if (!data?.message || data.message.sender._id === user._id) {
+          console.log('📨 [WriterChat] Skipping own message or invalid message');
+          return;
+        }
+
         if (currentChat && data.chatId === currentChat.id) {
           setMessages(prev => {
-            if (prev.some(m => m.id === (data.message._id || data.message.id))) return prev;
-            const mapped = {
+            const existingMessage = prev.find(m =>
+              m.id === data.message._id ||
+              (m.timestamp === data.message.timestamp &&
+               m.sender._id === data.message.sender._id &&
+               m.content === data.message.content)
+            );
+
+            if (existingMessage) {
+              console.log('📨 [WriterChat] Message already exists, skipping');
+              return prev;
+            }
+
+            const newMessage = {
               id: data.message._id || data.message.id,
-              content: data.message?.content || '',
-              sender: data.message?.sender || {},
-              timestamp: data.message?.timestamp || data.message?.createdAt || new Date().toISOString(),
-              fileUrl: data.message?.fileUrl,
-              fileName: data.message?.fileName,
-              fileType: data.message?.fileType,
-              fileSize: data.message?.fileSize,
-              voiceDuration: data.message?.voiceDuration,
-              replyTo: data.message?.replyTo,
-              read: true
+              content: data.message.content || '',
+              sender: data.message.sender,
+              timestamp: data.message.timestamp || data.message.createdAt || new Date().toISOString(),
+              fileUrl: data.message.fileUrl,
+              fileName: data.message.fileName,
+              fileType: data.message.fileType,
+              fileSize: data.message.fileSize,
+              voiceDuration: data.message.voiceDuration,
+              // CRITICAL: Preserve reply structure from server
+              replyTo: data.message.replyTo || null,
+              read: true,
+              chatId: data.chatId,
+              isFromServer: true
             };
-            return [...prev, mapped];
+
+            console.log('📨 [WriterChat] Adding new message to chat');
+            const updated = [...prev, newMessage];
+            
+            // Cache the updated messages with reply context
+            (async () => { 
+              try { 
+                if (currentChat?.id) {
+                  await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); 
+                }
+              } catch (e) {} 
+            })();
+            
+            return updated;
           });
-          socket.emit('markMessagesAsRead', { chatId: currentChat.id, userId: user._id });
-          setTimeout(() => scrollToBottom(), 50);
+
+          socket.emit('markMessagesAsRead', {
+            chatId: currentChat.id,
+            userId: user._id
+          });
+
+          setTimeout(() => scrollToBottom(), 100);
         }
+
+        // Update chat list
         setChats(prev => prev.map(c => c.id === data.chatId ? {
           ...c,
           lastMessage: data.message?.content || c.lastMessage,
           lastMessageTime: data.message?.timestamp || new Date().toISOString()
         } : c));
+
       } catch (error) {
-        console.error('Error handling received message:', error);
+        console.error('❌ [WriterChat] Error handling received message:', error);
       }
     };
 
@@ -258,6 +396,10 @@ const WriterChat = () => {
       setCallStartTime(Date.now());
       stopRingtone();
       startCallTimer();
+      
+      // Start simulated audio streaming
+      startAudioStreaming();
+      
       showSnackbar('Call connected');
     };
 
@@ -273,6 +415,7 @@ const WriterChat = () => {
     const handleCallEnded = (callData) => {
       console.log('📞 [WriterChat] Call ended:', callData);
       endCall();
+      stopAudioStreaming();
       showSnackbar('Call ended');
     };
 
@@ -304,6 +447,9 @@ const WriterChat = () => {
     socket.on('callFailed', handleCallFailed);
 
     return () => {
+      console.log('🧹 [WriterChat] Cleaning up socket listeners');
+
+      // Remove all message-related listeners
       socket.off('messageBroadcast', handleReceiveMessage);
       socket.off('newMessage', handleReceiveMessage);
       socket.off('messageSent', handleReceiveMessage);
@@ -313,13 +459,34 @@ const WriterChat = () => {
       socket.off('userOnline', handleUserOnline);
       socket.off('userOffline', handleUserOffline);
       socket.off('messagesRead', handleMessagesRead);
-      
-      // Call event cleanup
+
+      // Remove all call-related listeners
       socket.off('incomingCall', handleIncomingCall);
       socket.off('callAccepted', handleCallAccepted);
       socket.off('callRejected', handleCallRejected);
       socket.off('callEnded', handleCallEnded);
       socket.off('callFailed', handleCallFailed);
+
+      // Clear any pending timeouts
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+
+      // Stop any active call timers
+      if (callTimer) {
+        clearInterval(callTimer);
+      }
+
+      // Clean up audio resources
+      if (currentSound) {
+        currentSound.unloadAsync();
+      }
+      if (ringtoneSound) {
+        ringtoneSound.unloadAsync();
+      }
+      if (callSound) {
+        callSound.unloadAsync();
+      }
     };
   }, [socket, user?._id, currentChat]);
 
@@ -387,17 +554,16 @@ const WriterChat = () => {
 
   const fetchMessages = async (selectedChatId = chatId) => {
     if (!selectedChatId) return;
-    
+
     try {
       setLoadingMessages(true);
       console.log('📱 [WriterChat] Fetching messages for chat:', selectedChatId);
-      
-      // Fetch messages instantly without delay
+
       const messagesData = await getChatMessages(selectedChatId);
-      console.log('📱 [WriterChat] Messages data:', messagesData);
-      
+      console.log('📱 [WriterChat] Raw messages data:', messagesData);
+
       const messagesArray = Array.isArray(messagesData) ? messagesData : messagesData?.messages || [];
-      
+
       const enhancedMessages = messagesArray.map(msg => ({
         id: msg._id || msg.id,
         content: msg.content || msg.message || '',
@@ -408,18 +574,49 @@ const WriterChat = () => {
         fileType: msg.fileType,
         fileSize: msg.fileSize,
         voiceDuration: msg.voiceDuration,
-        replyTo: msg.replyTo,
-        read: msg.read || false
+        // CRITICAL: Preserve the original replyTo structure from server
+        replyTo: msg.replyTo || null,
+        read: msg.read || false,
+        chatId: selectedChatId,
+        isFromServer: true
       }));
+
+      // Sort messages by timestamp
+      const sortedMessages = enhancedMessages.sort((a, b) =>
+        new Date(a.timestamp) - new Date(b.timestamp)
+      );
+
+      // Normalize with proper reply handling
+      const normalized = normalizeMessages(sortedMessages);
+      setMessages(normalized);
       
-      setMessages(enhancedMessages.reverse()); // Most recent at bottom
-      
-      // Immediate scroll to bottom without delay
-      setTimeout(() => scrollToBottom(false), 10);
-      
-    } catch (err) {
-      console.error('📱 [WriterChat] Error fetching messages:', err);
-      Alert.alert('Error', 'Failed to load messages');
+      // Cache the normalized messages
+      try { 
+        await AsyncStorage.setItem(`chat_messages_${selectedChatId}`, JSON.stringify(normalized)); 
+      } catch (e) {
+        console.warn('Failed to cache messages:', e);
+      }
+
+      // Mark messages as read only if we're not already in a loading state
+      if (socket && !loading) {
+        try {
+          socket.emit('markMessagesAsRead', { chatId: selectedChatId, userId: user._id });
+        } catch (e) {
+          console.warn('Failed to mark messages as read:', e);
+        }
+      }
+
+      // Scroll to bottom after a brief delay to allow rendering
+      setTimeout(() => scrollToBottom(false), 100);
+
+    } catch (error) {
+      console.error('📱 [WriterChat] Error fetching messages:', error);
+      showSnackbar('Failed to load messages');
+
+      // Don't clear messages on error - keep existing ones
+      if (messages.length === 0) {
+        setMessages([]);
+      }
     } finally {
       setLoadingMessages(false);
     }
@@ -431,7 +628,7 @@ const WriterChat = () => {
 
     const messageContent = messageText.trim();
     const filesToSend = [...selectedFiles];
-    const replyToMessage = replyingTo;
+    const replyToMessage = replyingTo; // Store the full reply context
 
     setMessageText('');
     setSelectedFiles([]);
@@ -455,11 +652,29 @@ const WriterChat = () => {
             fileName: file.name,
             fileType: file.mimeType,
             fileSize: file.size,
-            replyTo: replyToMessage,
+            // CRITICAL: Preserve the full reply context in optimistic message
+            replyTo: replyToMessage ? {
+              _id: replyToMessage._id || replyToMessage.id,
+              content: replyToMessage.content,
+              sender: replyToMessage.sender,
+              timestamp: replyToMessage.timestamp
+            } : null,
             isOptimistic: true,
             isUploading: true
           };
-          setMessages(prev => [...prev, optimisticMessage]);
+
+          setMessages(prev => {
+            const updated = [...prev, optimisticMessage];
+            // Cache with reply context preserved
+            (async () => { 
+              try { 
+                if (currentChat?.id) {
+                  await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); 
+                }
+              } catch (e) {} 
+            })();
+            return updated;
+          });
           setSendingMessages(prev => new Set([...prev, optimisticId]));
           scrollToBottom();
 
@@ -468,17 +683,23 @@ const WriterChat = () => {
               chatId: currentChat.id,
               file: { uri: file.uri, name: file.name, type: file.mimeType, size: file.size },
               content: messageContent,
-              replyTo: replyToMessage?._id,
+              replyTo: replyToMessage?._id || replyToMessage?.id,
               voiceDuration: file.duration
             });
 
             setMessages(prev => prev.map(msg => msg.id === optimisticId ? {
-            ...realMessage,
-            id: realMessage._id,
-            isOptimistic: false,
-            isUploading: false,
-            replyTo: realMessage.replyTo || replyToMessage
-          } : msg));
+              ...realMessage,
+              id: realMessage._id,
+              isOptimistic: false,
+              isUploading: false,
+              // Ensure reply context is preserved from server or fallback to original
+              replyTo: realMessage.replyTo || replyToMessage ? {
+                _id: replyToMessage._id || replyToMessage.id,
+                content: replyToMessage.content,
+                sender: replyToMessage.sender,
+                timestamp: replyToMessage.timestamp
+              } : null
+            } : msg));
 
             setSendingMessages(prev => {
               const newSet = new Set(prev);
@@ -488,31 +709,26 @@ const WriterChat = () => {
 
           } catch (uploadErr) {
             console.error('❌ [WriterChat] File upload error:', uploadErr);
-            console.error('❌ [WriterChat] Error details:', {
-              message: uploadErr.message,
-              status: uploadErr.status,
-              response: uploadErr.response?.data
-            });
-
-            let errorMessage = `Failed to upload: ${file.name}`;
-            if (uploadErr.response?.data?.message) {
-              errorMessage += ` - ${uploadErr.response.data.message}`;
-            } else if (uploadErr.message) {
-              errorMessage += ` - ${uploadErr.message}`;
-            }
-
+            
             setMessages(prev => prev.map(msg => msg.id === optimisticId ? {
               ...msg,
-              content: errorMessage,
+              content: `Failed to upload: ${file.name}`,
               isUploading: false,
-              uploadError: true
+              uploadError: true,
+              replyTo: replyToMessage ? {
+                _id: replyToMessage._id || replyToMessage.id,
+                content: replyToMessage.content,
+                sender: replyToMessage.sender,
+                timestamp: replyToMessage.timestamp
+              } : null
             } : msg));
+            
             setSendingMessages(prev => {
               const newSet = new Set(prev);
               newSet.delete(optimisticId);
               return newSet;
             });
-            showSnackbar(errorMessage);
+            showSnackbar(`Failed to upload: ${file.name}`);
           }
         }
       } else if (messageContent) {
@@ -522,10 +738,26 @@ const WriterChat = () => {
           content: messageContent,
           sender: { _id: user._id, name: user.name, avatar: user.avatar },
           timestamp: new Date().toISOString(),
-          replyTo: replyToMessage,
+          replyTo: replyToMessage ? {
+            _id: replyToMessage._id || replyToMessage.id,
+            content: replyToMessage.content,
+            sender: replyToMessage.sender,
+            timestamp: replyToMessage.timestamp
+          } : null,
           isOptimistic: true
         };
-        setMessages(prev => [...prev, optimisticMessage]);
+
+        setMessages(prev => {
+          const updated = [...prev, optimisticMessage];
+          (async () => { 
+            try { 
+              if (currentChat?.id) {
+                await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); 
+              }
+            } catch (e) {} 
+          })();
+          return updated;
+        });
         setSendingMessages(prev => new Set([...prev, optimisticId]));
         scrollToBottom();
 
@@ -533,14 +765,22 @@ const WriterChat = () => {
           const realMessage = await sendChatMessage({
             chatId: currentChat.id,
             content: messageContent,
-            replyTo: replyToMessage?._id
+            replyTo: replyToMessage?._id || replyToMessage?.id
           });
+
           setMessages(prev => prev.map(msg => msg.id === optimisticId ? {
             ...realMessage,
             id: realMessage._id,
             isOptimistic: false,
-            replyTo: realMessage.replyTo || replyToMessage
+            // Preserve reply context from server or fallback to original
+            replyTo: realMessage.replyTo || (replyToMessage ? {
+              _id: replyToMessage._id || replyToMessage.id,
+              content: replyToMessage.content,
+              sender: replyToMessage.sender,
+              timestamp: replyToMessage.timestamp
+            } : null)
           } : msg));
+
           setSendingMessages(prev => {
             const newSet = new Set(prev);
             newSet.delete(optimisticId);
@@ -551,8 +791,15 @@ const WriterChat = () => {
             ...msg,
             content: `Failed to send: ${messageContent}`,
             sendError: true,
-            isOptimistic: false
+            isOptimistic: false,
+            replyTo: replyToMessage ? {
+              _id: replyToMessage._id || replyToMessage.id,
+              content: replyToMessage.content,
+              sender: replyToMessage.sender,
+              timestamp: replyToMessage.timestamp
+            } : null
           } : msg));
+
           setSendingMessages(prev => {
             const newSet = new Set(prev);
             newSet.delete(optimisticId);
@@ -579,18 +826,66 @@ const WriterChat = () => {
       router.setParams({ chatId: chat.id });
     }
     if (joinChat) joinChat(chat.id);
+    // Proactively mark as read on open
+    if (socket) {
+      try { socket.emit('markMessagesAsRead', { chatId: chat.id, userId: user._id }); } catch {}
+    }
   };
 
   // Message interaction handlers
   const handleReply = (message) => setReplyingTo(message);
   const cancelReply = () => setReplyingTo(null);
 
+  // keep index map up to date
+  useEffect(() => {
+    const map = new Map();
+    messages.forEach((m, idx) => {
+      const key = m.id || m._id;
+      if (key) map.set(key, idx);
+    });
+    messageIndexMapRef.current = map;
+  }, [messages]);
+
   const scrollToMessage = (messageId) => {
-    const index = messages.findIndex(m => m.id === messageId);
-    if (index !== -1) {
-      flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
-      setHighlightedMessageId(messageId);
-      setTimeout(() => setHighlightedMessageId(null), 2000);
+    const index = messageIndexMapRef.current.get(messageId);
+    if (index !== -1 && flatListRef.current) {
+      try {
+        flatListRef.current.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.3, // Show message slightly above center
+          viewOffset: 20 // Add some offset for better visibility
+        });
+
+        // Highlight the message with animation
+        setHighlightedMessageId(messageId);
+
+        // Clear highlight after 3 seconds
+        setTimeout(() => {
+          setHighlightedMessageId(null);
+        }, 3000);
+
+        // Add a subtle flash animation
+        const highlightAnim = new Animated.Value(0);
+        Animated.sequence([
+          Animated.timing(highlightAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(highlightAnim, {
+            toValue: 0,
+            duration: 300,
+            delay: 1000,
+            useNativeDriver: true,
+          })
+        ]).start();
+
+      } catch (error) {
+        console.warn('Failed to scroll to message:', error);
+        // Fallback: scroll to bottom if scrollToIndex fails
+        scrollToBottom();
+      }
     }
   };
 
@@ -808,10 +1103,122 @@ const WriterChat = () => {
     }
   };
 
-  // WhatsApp-style swipe to reply component (temporarily disabled)
+  // WhatsApp-style swipe to reply with PanResponder + Animated for stability
   const SwipeableMessage = ({ children, onSwipeReply, message }) => {
-    // Temporarily return children without gesture handling to fix the error
-    return <>{children}</>;
+    const translateX = useRef(new Animated.Value(0)).current;
+    const replied = useRef(false);
+    const replyIconOpacity = useRef(new Animated.Value(0)).current;
+    const replyIconScale = useRef(new Animated.Value(0.8)).current;
+
+    const resetPosition = () => {
+      Animated.parallel([
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+          bounciness: 6,
+        }),
+        Animated.timing(replyIconOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(replyIconScale, {
+          toValue: 0.8,
+          useNativeDriver: true,
+        })
+      ]).start(() => {
+        replied.current = false;
+      });
+    };
+
+    const showReplyIcon = (progress) => {
+      const opacity = Math.min(progress / swipeThreshold, 1);
+      const scale = 0.8 + (opacity * 0.2);
+      replyIconOpacity.setValue(opacity);
+      replyIconScale.setValue(scale);
+    };
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          const { dx, dy } = gestureState;
+          return Math.abs(dx) > 10 && Math.abs(dy) < 20;
+        },
+        onPanResponderGrant: () => {
+          replied.current = false;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const { dx } = gestureState;
+          const clampedDx = Math.max(Math.min(dx, 120), -120);
+          translateX.setValue(clampedDx);
+
+          // Show reply icon with progress
+          showReplyIcon(Math.abs(dx));
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const { dx } = gestureState;
+
+          if (Math.abs(dx) > swipeThreshold && !replied.current) {
+            replied.current = true;
+            // Trigger haptic feedback if available
+            if (Platform.OS === 'ios') {
+              // Add haptic feedback for iOS
+            }
+            onSwipeReply?.(message);
+
+            // Animate to show success
+            Animated.sequence([
+              Animated.timing(replyIconOpacity, {
+                toValue: 1,
+                duration: 100,
+                useNativeDriver: true,
+              }),
+              Animated.timing(replyIconOpacity, {
+                toValue: 0,
+                duration: 300,
+                delay: 500,
+                useNativeDriver: true,
+              })
+            ]).start();
+          }
+
+          resetPosition();
+        },
+        onPanResponderTerminate: resetPosition,
+      })
+    ).current;
+
+    return (
+      <View style={{ position: 'relative' }}>
+        {/* Reply indicator that appears on swipe */}
+        <Animated.View
+          style={[
+            styles.replyIndicator,
+            {
+              opacity: replyIconOpacity,
+              transform: [{ scale: replyIconScale }],
+            }
+          ]}
+        >
+          <Icon name="reply" size={20} color="#22C55E" />
+          <Text style={styles.replyIndicatorText}>Reply</Text>
+        </Animated.View>
+
+        <Animated.View
+          style={{
+            transform: [{ translateX }],
+            backgroundColor: translateX.interpolate({
+              inputRange: [0, 80],
+              outputRange: ['transparent', 'rgba(34, 197, 94, 0.1)'],
+            }),
+          }}
+          {...panResponder.panHandlers}
+        >
+          {children}
+        </Animated.View>
+      </View>
+    );
   };
 
 
@@ -1280,11 +1687,15 @@ const WriterChat = () => {
       stopRingtone();
       startCallTimer();
       
+      // Start simulated audio streaming
+      startAudioStreaming();
+      
       // Emit call accepted event
       if (socket && incomingCall) {
         socket.emit('callAccepted', {
           callId: incomingCall.id,
-          recipientId: user._id
+          recipientId: user._id,
+          timestamp: Date.now()
         });
       }
       
@@ -1327,12 +1738,14 @@ const WriterChat = () => {
       setCallStartTime(null);
       stopCallTimer();
       stopRingtone();
+      stopAudioStreaming();
       
       // Emit call ended event
       if (socket) {
         socket.emit('callEnded', {
           callId: incomingCall?.id || outgoingCall?.id,
-          userId: user._id
+          userId: user._id,
+          timestamp: Date.now()
         });
       }
       
@@ -1363,6 +1776,41 @@ const WriterChat = () => {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Enhanced audio streaming simulation for real-time calls
+  const startAudioStreaming = async () => {
+    try {
+      console.log('🎵 [WriterChat] Starting audio streaming simulation...');
+      
+      // Set up audio mode for real-time streaming
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: true,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+      });
+
+      // Simulate real-time audio streaming
+      // In a real implementation, this would handle WebRTC audio streams
+      console.log('✅ [WriterChat] Audio streaming started');
+      
+    } catch (error) {
+      console.error('❌ [WriterChat] Audio streaming error:', error);
+    }
+  };
+
+  const stopAudioStreaming = () => {
+    try {
+      console.log('🎵 [WriterChat] Stopping audio streaming...');
+      // Clean up audio streaming resources
+      console.log('✅ [WriterChat] Audio streaming stopped');
+    } catch (error) {
+      console.error('❌ [WriterChat] Stop audio streaming error:', error);
+    }
+  };
+
   // Utility functions
   const scrollToBottom = (animated = true) => {
     if (isMountedRef.current && flatListRef.current && messages.length > 0) {
@@ -1386,16 +1834,18 @@ const WriterChat = () => {
 
   const formatTime = (timestamp) => {
     try {
+      if (!timestamp) return '';
       const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return '';
       const now = new Date();
-      const diff = now - date;
-      
+      const diff = now.getTime() - date.getTime();
+
       if (diff < 60000) return 'Just now';
       if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-      if (diff < 86400000) return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (diff < 86400000) return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     } catch (error) {
-      return 'Now';
+      return '';
     }
   };
 
@@ -1625,8 +2075,8 @@ const WriterChat = () => {
               onPress={() => scrollToMessage(message.replyTo._id)}
             >
               <View style={styles.replyBar} />
-              <View style={{ flex: 1 }}>
-                <Text style={[styles.replyAuthor, { color: isOwn ? 'rgba(255,255,255,0.9)' : '#1F2937' }]}>
+              <View style={{ flex: 1, flexShrink: 1 }}>
+                <Text style={[styles.replyAuthor, { color: isOwn ? 'rgba(255,255,255,0.9)' : '#1F2937' }]} numberOfLines={1}>
                   {message.replyTo.sender?.name}
                 </Text>
                 <Text style={[styles.replyText, { color: isOwn ? 'rgba(255,255,255,0.7)' : '#6B7280' }]} numberOfLines={2}>
@@ -1700,7 +2150,7 @@ const WriterChat = () => {
 
           <View style={styles.messageFooter}>
             <Text style={[styles.messageTime, isOwn ? styles.ownMessageTime : styles.otherMessageTime]}>
-              {formatTime(message.timestamp)}
+              {formatTime(message.timestamp) || ' '}
             </Text>
             {isOwn && renderMessageStatus(message)}
           </View>
@@ -1916,10 +2366,21 @@ const WriterChat = () => {
             data={messages}
             renderItem={renderMessage}
             keyExtractor={(item, index) => `${String(item._id || item.id || item.messageId || item.timestamp || 'msg')}-${index}`}
-            contentContainerStyle={[styles.messagesList, { paddingBottom: 140 }]}
+            contentContainerStyle={[styles.messagesList, { paddingBottom: 24 }]}
             onContentSizeChange={() => scrollToBottom(true)}
             onLayout={() => scrollToBottom(true)}
             showsVerticalScrollIndicator={false}
+            onScrollToIndexFailed={(info) => {
+              try {
+                const wait = new Promise(resolve => setTimeout(resolve, 300));
+                wait.then(() => {
+                  if (flatListRef.current) {
+                    flatListRef.current.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index), animated: true });
+                  }
+                });
+              } catch (e) {}
+            }}
+            getItemLayout={(_, index) => ({ length: 72, offset: 72 * index, index })}
             onScroll={(e) => {
               const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
               const isAtBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 50;
@@ -1958,10 +2419,10 @@ const WriterChat = () => {
       {/* Reply Banner */}
       {replyingTo && (
         <View style={styles.replyBanner}>
-          <View style={{ flex: 1 }}>
+          <TouchableOpacity style={{ flex: 1 }} onPress={() => scrollToMessage(replyingTo.id || replyingTo._id)}>
             <Text style={styles.replyBannerTitle}>Replying to {replyingTo.sender?.name}</Text>
             <Text style={styles.replyBannerText} numberOfLines={1}>{replyingTo.content}</Text>
-          </View>
+          </TouchableOpacity>
           <TouchableOpacity onPress={cancelReply}>
             <Text style={{ color: '#6B7280' }}>✕</Text>
           </TouchableOpacity>
@@ -2007,7 +2468,7 @@ const WriterChat = () => {
           </TouchableOpacity>
 
           <View style={styles.textInputContainer}>
-            <TextInput
+            <RNTextInput
               value={messageText}
               onChangeText={handleTypingChange}
               placeholder="Type a message..."
@@ -2449,6 +2910,42 @@ const styles = StyleSheet.create({
     marginHorizontal: 12,
     alignItems: 'flex-end',
   },
+
+  // Reply Styles
+  replyContainer: {
+    flexDirection: 'row',
+    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#22C55E',
+    alignSelf: 'stretch',
+    maxWidth: '90%',
+    flexShrink: 1,
+  },
+  replyBar: {
+    width: 3,
+    backgroundColor: '#22C55E',
+    borderRadius: 1.5,
+    marginRight: 8,
+  },
+  replyContent: {
+    flex: 1,
+    flexShrink: 1,
+    minWidth: 0, // Allow text to wrap properly
+  },
+  replyAuthor: {
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  replyText: {
+    fontSize: 13,
+    lineHeight: 16,
+    flexShrink: 1,
+  },
   ownMessageContainer: {
     alignSelf: 'flex-end',
     maxWidth: width * 0.8,
@@ -2468,6 +2965,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
     maxWidth: '100%',
+    flexShrink: 1,
   },
   highlightedMessage: {
     backgroundColor: 'rgba(102, 126, 234, 0.1)',
@@ -2575,9 +3073,12 @@ const styles = StyleSheet.create({
   replyPreview: {
     flexDirection: 'row', 
     marginBottom: 8, 
-    backgroundColor: 'rgba(255,255,255,0.1)', 
+    backgroundColor: 'rgba(34,197,94,0.10)', 
     borderRadius: 8, 
-    padding: 8
+    padding: 8,
+    alignSelf: 'stretch',
+    flexShrink: 1,
+    minWidth: width * 0.5
   },
   replyBar: { 
     width: 3, 
@@ -2685,15 +3186,41 @@ const styles = StyleSheet.create({
     justifyContent: 'center' 
   },
 
+  // Reply indicator styles for swipe gesture
+  replyIndicator: {
+    position: 'absolute',
+    left: -60,
+    top: '50%',
+    transform: [{ translateY: -15 }],
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#22C55E',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+    zIndex: 10,
+    elevation: 5,
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  replyIndicatorText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
+  },
+
   // Reply Banner & Files Preview
-  replyBanner: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    backgroundColor: '#F0F9FF', 
-    paddingHorizontal: 16, 
-    paddingVertical: 12, 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#E2E8F0' 
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F0F9FF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0'
   },
   replyBannerTitle: { 
     fontSize: 12, 

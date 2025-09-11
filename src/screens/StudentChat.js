@@ -1,40 +1,42 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-    Alert,
-    Animated,
-    Dimensions,
-    FlatList,
-    Image,
-    Keyboard,
-    KeyboardAvoidingView,
-    Linking,
-    Modal,
-    Platform,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  PanResponder,
+  Platform,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import {
-    ActivityIndicator,
-    Avatar,
-    Badge,
-    Button,
-    Chip,
-    Menu,
-    Provider as PaperProvider,
-    Portal,
-    Searchbar,
-    Snackbar
+  ActivityIndicator,
+  Avatar,
+  Badge,
+  Button,
+  Chip,
+  Menu,
+  Provider as PaperProvider,
+  Portal,
+  Searchbar,
+  Snackbar
 } from 'react-native-paper';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -312,10 +314,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   highlightedMessage: {
-    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+    backgroundColor: 'rgba(34, 197, 94, 0.2)',
     borderRadius: 12,
     padding: 4,
     margin: 2,
+    borderWidth: 2,
+    borderColor: '#22C55E',
+    shadowColor: '#22C55E',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
   },
   messageAvatar: {
     marginRight: 8,
@@ -326,6 +335,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 18,
     maxWidth: '100%',
+    flexShrink: 1,
   },
   ownBubble: {
     backgroundColor: '#015382',
@@ -377,11 +387,16 @@ const styles = StyleSheet.create({
   replyContainer: {
     flexDirection: 'row',
     marginBottom: 8,
-    paddingLeft: 12,
-    paddingRight: 8,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 8,
+    backgroundColor: 'rgba(34,197,94,0.10)',
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#22C55E',
+    alignSelf: 'stretch',
+    maxWidth: '90%',
+    flexShrink: 1,
+    minWidth: width * 0.5,
   },
   replyBar: {
     width: 3,
@@ -391,6 +406,8 @@ const styles = StyleSheet.create({
   },
   replyContent: {
     flex: 1,
+    flexShrink: 1,
+    minWidth: 0, // Allow text to wrap properly
   },
   replyAuthor: {
     fontSize: 12,
@@ -400,6 +417,7 @@ const styles = StyleSheet.create({
   replyText: {
     fontSize: 13,
     lineHeight: 16,
+    flexShrink: 1,
   },
   replyBanner: {
     flexDirection: 'row',
@@ -422,6 +440,32 @@ const styles = StyleSheet.create({
   replyBannerText: {
     fontSize: 14,
     color: '#64748B',
+  },
+
+  // Reply indicator styles for swipe gesture
+  replyIndicator: {
+    position: 'absolute',
+    left: -60,
+    top: '50%',
+    transform: [{ translateY: -15 }],
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#667EEA',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 16,
+    zIndex: 10,
+    elevation: 5,
+    shadowColor: '#667EEA',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+  },
+  replyIndicatorText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 4,
   },
   
   // File Styles
@@ -735,7 +779,9 @@ const styles = StyleSheet.create({
   mainHeader: {
     paddingHorizontal: 20,
     paddingVertical: 30,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
   },
   mainTitle: {
     fontSize: 24,
@@ -1005,6 +1051,7 @@ const styles = StyleSheet.create({
 const StudentChat = () => {
   const { chatId } = useLocalSearchParams();
   const router = useRouter();
+  const navigation = useNavigation();
   const { user } = useAuth();
   const { setLoading: setGlobalLoading } = useAppLoading();
   const { socket, joinChat, leaveChat } = useSocket() || {};
@@ -1045,8 +1092,87 @@ const StudentChat = () => {
   const [menuVisible, setMenuVisible] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [isScrollingToMessage, setIsScrollingToMessage] = useState(false);
+  const scrollTimeoutRef = useRef(null);
+  const isUserScrollingRef = useRef(false);
   const [playingAudioId, setPlayingAudioId] = useState(null);
   const [currentSound, setCurrentSound] = useState(null);
+  const [swipeThreshold] = useState(64);
+  const messageIndexMapRef = useRef(new Map());
+
+  const normalizeMessages = (msgs) => {
+    try {
+      const arr = Array.isArray(msgs) ? msgs : [];
+      const messageMap = new Map();
+      
+      // First pass: create a map of all messages for reference lookup
+      arr.forEach(msg => {
+        const key = msg._id || msg.id;
+        if (key) {
+          messageMap.set(key, msg);
+        }
+      });
+      
+      return arr.map(m => {
+        // Ensure basic message structure
+        const normalizedMessage = {
+          id: m._id || m.id,
+          content: m.content || m.message || '',
+          sender: m.sender || { _id: '', name: 'Unknown', avatar: null },
+          timestamp: m.timestamp || m.createdAt || new Date().toISOString(),
+          fileUrl: m.fileUrl,
+          fileName: m.fileName,
+          fileType: m.fileType,
+          fileSize: m.fileSize,
+          voiceDuration: m.voiceDuration,
+          read: m.read || false,
+          chatId: m.chatId,
+          isFromServer: m.isFromServer || false,
+          replyTo: null // Initialize as null
+        };
+
+        // Handle replyTo properly
+        if (m.replyTo) {
+          const replyTo = m.replyTo;
+          
+          // Case 1: replyTo is just a string ID
+          if (typeof replyTo === 'string') {
+            const referencedMessage = messageMap.get(replyTo);
+            if (referencedMessage) {
+              normalizedMessage.replyTo = {
+                _id: referencedMessage._id || referencedMessage.id,
+                content: referencedMessage.content || referencedMessage.message || 'Message not available',
+                sender: referencedMessage.sender || { _id: '', name: 'Unknown', avatar: null },
+                timestamp: referencedMessage.timestamp || referencedMessage.createdAt || null
+              };
+            } else {
+              // Create placeholder for missing message
+              normalizedMessage.replyTo = { 
+                _id: replyTo, 
+                content: 'Message not available', 
+                sender: { _id: '', name: 'Unknown', avatar: null },
+                timestamp: null
+              };
+            }
+          }
+          // Case 2: replyTo is already an object
+          else if (typeof replyTo === 'object' && replyTo !== null) {
+            normalizedMessage.replyTo = {
+              _id: replyTo._id || replyTo.id || replyTo,
+              content: replyTo.content || replyTo.message || 'Message not available',
+              sender: replyTo.sender || { _id: '', name: 'Unknown', avatar: null },
+              timestamp: replyTo.timestamp || replyTo.createdAt || null
+            };
+          }
+        }
+
+        return normalizedMessage;
+      });
+    } catch (error) {
+      console.warn('❌ [StudentChat] Error normalizing messages:', error);
+      return Array.isArray(msgs) ? msgs : [];
+    }
+  };
 
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -1076,6 +1202,7 @@ const StudentChat = () => {
   const scrollOffset = useRef(0);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(height)).current;
+  const replySwipeX = useRef(new Animated.Value(0)).current;
 
   // Initialize component
   useEffect(() => {
@@ -1084,8 +1211,25 @@ const StudentChat = () => {
     fetchChats();
     fetchAgreements();
     
+    
     if (chatId) {
+      (async () => {
+        try {
+          const cached = await AsyncStorage.getItem(`chat_messages_${chatId}`);
+          if (cached) {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length) {
+              // Re-normalize cached messages to ensure proper structure
+              const reNormalized = normalizeMessages(parsed);
+              setMessages(reNormalized);
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to load cached messages:', e);
+        }
+        // Always fetch fresh messages after loading cache
       fetchMessages(chatId);
+      })();
       setShowChatList(false);
     }
 
@@ -1105,6 +1249,7 @@ const StudentChat = () => {
     };
   }, [chatId]);
 
+
   // Socket real-time listeners
   useEffect(() => {
     if (!socket || !user || !user._id) return;
@@ -1113,40 +1258,75 @@ const StudentChat = () => {
 
     const handleReceiveMessage = (data) => {
       try {
-        if (!data?.message || data.message.sender._id === user._id) return;
+        console.log('📨 [StudentChat] Received message:', data);
+
+        // Skip if message is from current user (prevent duplicates with optimistic UI)
+        if (!data?.message || data.message.sender._id === user._id) {
+          console.log('📨 [StudentChat] Skipping own message or invalid message');
+          return;
+        }
 
         if (currentChat && data.chatId === currentChat.id) {
           setMessages(prev => {
-            if (prev.some(m => m.id === data.message._id)) return prev;
+            // Check for duplicates more thoroughly
+            const existingMessage = prev.find(m =>
+              m.id === data.message._id ||
+              (m.timestamp === data.message.timestamp &&
+               m.sender._id === data.message.sender._id &&
+               m.content === data.message.content)
+            );
+
+            if (existingMessage) {
+              console.log('📨 [StudentChat] Message already exists, skipping');
+              return prev;
+            }
             
             const newMessage = {
-              id: data.message._id,
-              content: data.message.content,
+              id: data.message._id || data.message.id,
+              content: data.message.content || '',
               sender: data.message.sender,
-              timestamp: data.message.timestamp || data.message.createdAt,
+              timestamp: data.message.timestamp || data.message.createdAt || new Date().toISOString(),
               fileUrl: data.message.fileUrl,
               fileName: data.message.fileName,
               fileType: data.message.fileType,
               fileSize: data.message.fileSize,
               voiceDuration: data.message.voiceDuration,
-              replyTo: data.message.replyTo,
-              read: true
+              // CRITICAL: Preserve reply structure from server
+              replyTo: data.message.replyTo || null,
+              read: true,
+              chatId: data.chatId,
+              isFromServer: true
             };
+
+            console.log('📨 [StudentChat] Adding new message to chat');
+            const updated = [...prev, newMessage];
             
-            return [...prev, newMessage];
+            // Cache the updated messages with reply context
+            (async () => { 
+              try { 
+                if (currentChat?.id) {
+                  await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); 
+                }
+              } catch (e) {} 
+            })();
+            
+            return updated;
           });
 
+          // Mark as read for current user
           socket.emit('markMessagesAsRead', { 
             chatId: currentChat.id, 
             userId: user._id 
           });
           
+          // Scroll to bottom with delay to allow rendering
           setTimeout(() => scrollToBottom(true), 100);
         }
 
+        // Always update the chat list
         updateChatList(data);
       } catch (error) {
-        console.error('Error handling message:', error);
+        console.error('❌ [StudentChat] Error handling received message:', error);
       }
     };
 
@@ -1187,6 +1367,20 @@ const StudentChat = () => {
     const handleIncomingCall = (callData) => {
       console.log('📞 [StudentChat] Incoming call:', callData);
       
+      // Set incoming call state
+      setIncomingCall({
+        id: callData.callId,
+        callerId: callData.from,
+        callerName: callData.fromName,
+        callerAvatar: callData.fromAvatar,
+        chatId: callData.chatId,
+        timestamp: callData.timestamp || Date.now()
+      });
+      setCallState('ringing');
+      
+      // Play ringtone
+      playRingtone();
+      
       // Navigate to incoming call screen
       router.push({
         pathname: '/audio-call',
@@ -1207,6 +1401,9 @@ const StudentChat = () => {
       setCallStartTime(Date.now());
       stopRingtone();
       startCallTimer();
+      
+      // Start simulated audio streaming
+      startAudioStreaming();
     };
 
     const handleCallRejected = (callData) => {
@@ -1224,6 +1421,7 @@ const StudentChat = () => {
       setCallStartTime(null);
       stopCallTimer();
       stopRingtone();
+      stopAudioStreaming();
       setIncomingCall(null);
       setOutgoingCall(null);
       setIsMuted(false);
@@ -1263,6 +1461,9 @@ const StudentChat = () => {
     socket.on('callFailed', handleCallFailed);
 
     return () => {
+      console.log('🧹 [StudentChat] Cleaning up socket listeners');
+
+      // Remove all message-related listeners
       socket.off('messageBroadcast', handleReceiveMessage);
       socket.off('newMessage', handleReceiveMessage);
       socket.off('messageSent', handleReceiveMessage);
@@ -1272,11 +1473,37 @@ const StudentChat = () => {
       socket.off('userOnline', handleUserOnline);
       socket.off('userOffline', handleUserOffline);
       socket.off('messagesRead', handleMessagesRead);
+
+      // Remove all call-related listeners
       socket.off('incomingCall', handleIncomingCall);
       socket.off('callAccepted', handleCallAccepted);
       socket.off('callRejected', handleCallRejected);
       socket.off('callEnded', handleCallEnded);
       socket.off('callFailed', handleCallFailed);
+
+      // Clear any pending timeouts
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      // Stop any active call timers
+      if (callTimer) {
+        clearInterval(callTimer);
+      }
+
+      // Clean up audio resources
+      if (currentSound) {
+        currentSound.unloadAsync();
+      }
+      if (ringtoneSound) {
+        ringtoneSound.unloadAsync();
+      }
+      if (callSound) {
+        callSound.unloadAsync();
+      }
     };
   }, [socket, user?._id, currentChat]);
 
@@ -1389,8 +1616,17 @@ const StudentChat = () => {
     
     try {
       setLoadingMessages(true);
+      console.log('📱 [StudentChat] Fetching messages for chat:', selectedChatId);
+
       const messagesData = await getChatMessages(selectedChatId);
+      console.log('📱 [StudentChat] Raw messages data:', messagesData);
+
       const messagesArray = Array.isArray(messagesData) ? messagesData : messagesData?.messages || [];
+
+      // Build quick lookup map for raw messages by id
+      const rawById = new Map(
+        (messagesArray || []).map(m => [String(m._id || m.id), m])
+      );
       
       const enhancedMessages = messagesArray.map(msg => ({
         id: msg._id || msg.id,
@@ -1402,16 +1638,51 @@ const StudentChat = () => {
         fileType: msg.fileType,
         fileSize: msg.fileSize,
         voiceDuration: msg.voiceDuration,
-        replyTo: msg.replyTo,
-        read: msg.read || false
+        // CRITICAL: Preserve the original replyTo structure from server
+        replyTo: msg.replyTo || null,
+        read: msg.read || false,
+        chatId: selectedChatId,
+        isFromServer: true
       }));
+
+      console.log('📱 [StudentChat] Enhanced messages:', enhancedMessages.length);
+
+      // Sort messages by timestamp to ensure correct order
+      const sortedMessages = enhancedMessages.sort((a, b) =>
+        new Date(a.timestamp) - new Date(b.timestamp)
+      );
+
+      // Normalize with proper reply handling
+      const normalized = normalizeMessages(sortedMessages);
+      setMessages(normalized);
       
-      setMessages(enhancedMessages.reverse());
-      setTimeout(() => scrollToBottom(false), 50);
+      // Cache the normalized messages
+      try { 
+        await AsyncStorage.setItem(`chat_messages_${selectedChatId}`, JSON.stringify(normalized)); 
+      } catch (e) {
+        console.warn('Failed to cache messages:', e);
+      }
+
+      // Mark messages as read only if we're not already in a loading state
+      if (socket && !loading) {
+        try {
+          socket.emit('markMessagesAsRead', { chatId: selectedChatId, userId: user._id });
+        } catch (e) {
+          console.warn('Failed to mark messages as read:', e);
+        }
+      }
+
+      // Scroll to bottom after a brief delay to allow rendering
+      setTimeout(() => scrollToBottom(false), 100);
       
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.error('📱 [StudentChat] Error fetching messages:', error);
       showSnackbar('Failed to load messages');
+
+      // Don't clear messages on error - keep existing ones
+      if (messages.length === 0) {
+        setMessages([]);
+      }
     } finally {
       setLoadingMessages(false);
     }
@@ -1423,13 +1694,13 @@ const StudentChat = () => {
     const messageContent = messageText.trim();
     const filesToSend = [...selectedFiles];
     const replyToMessage = replyingTo;
-
+    
     // Clear input immediately
     setMessageText('');
     setSelectedFiles([]);
     setReplyingTo(null);
     setSending(true);
-
+    
     // Stop typing indicator
     if (socket) {
       socket.emit('stopTyping', {
@@ -1453,12 +1724,23 @@ const StudentChat = () => {
             fileName: file.name,
             fileType: file.mimeType,
             fileSize: file.size,
-            replyTo: replyToMessage,
+            // CRITICAL: Preserve the full reply context in optimistic message
+            replyTo: replyToMessage ? {
+              _id: replyToMessage._id || replyToMessage.id,
+              content: replyToMessage.content,
+              sender: replyToMessage.sender,
+              timestamp: replyToMessage.timestamp
+            } : null,
             isOptimistic: true,
             isUploading: true
           };
 
-          setMessages(prev => [...prev, optimisticMessage]);
+          setMessages(prev => {
+            const updated = [...prev, optimisticMessage];
+            // Cache with reply context preserved
+            (async () => { try { if (currentChat?.id) await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); } catch (e) {} })();
+            return updated;
+          });
           setSendingMessages(prev => new Set([...prev, optimisticId]));
           scrollToBottom();
 
@@ -1472,18 +1754,29 @@ const StudentChat = () => {
                 size: file.size
               },
               content: messageContent,
-              replyTo: replyToMessage?._id,
+              replyTo: replyToMessage?._id || replyToMessage?.id,
               voiceDuration: file.duration
             });
 
-            setMessages(prev => prev.map(msg => 
+            setMessages(prev => {
+              const updated = prev.map(msg =>
               msg.id === optimisticId ? {
                 ...realMessage,
                 id: realMessage._id,
                 isOptimistic: false,
-                isUploading: false
+                  isUploading: false,
+                  // Ensure reply context is preserved from server or fallback to original
+                  replyTo: realMessage.replyTo || replyToMessage ? {
+                    _id: replyToMessage._id || replyToMessage.id,
+                    content: replyToMessage.content,
+                    sender: replyToMessage.sender,
+                    timestamp: replyToMessage.timestamp
+                  } : null
               } : msg
-            ));
+              );
+              (async () => { try { if (currentChat?.id) await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); } catch (e) {} })();
+              return updated;
+            });
 
             setSendingMessages(prev => {
               const newSet = new Set(prev);
@@ -1508,14 +1801,24 @@ const StudentChat = () => {
               errorMessage += ` - ${uploadError.message}`;
             }
 
-            setMessages(prev => prev.map(msg => 
+            setMessages(prev => {
+              const updated = prev.map(msg =>
               msg.id === optimisticId ? {
                 ...msg,
                 content: errorMessage,
                 isUploading: false,
-                uploadError: true
+                  uploadError: true,
+                  replyTo: replyToMessage ? {
+                    _id: replyToMessage._id || replyToMessage.id,
+                    content: replyToMessage.content,
+                    sender: replyToMessage.sender,
+                    timestamp: replyToMessage.timestamp
+                  } : null
               } : msg
-            ));
+              );
+              (async () => { try { if (currentChat?.id) await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); } catch (e) {} })();
+              return updated;
+            });
 
             setSendingMessages(prev => {
               const newSet = new Set(prev);
@@ -1535,11 +1838,27 @@ const StudentChat = () => {
           content: messageContent,
           sender: { _id: user._id, name: user.name, avatar: user.avatar },
           timestamp: new Date().toISOString(),
-          replyTo: replyToMessage,
+          replyTo: replyToMessage ? {
+            _id: replyToMessage._id || replyToMessage.id,
+            content: replyToMessage.content,
+            sender: replyToMessage.sender,
+            timestamp: replyToMessage.timestamp
+          } : null,
           isOptimistic: true
         };
 
-        setMessages(prev => [...prev, optimisticMessage]);
+        setMessages(prev => {
+          const exists = prev.some(msg =>
+            msg.id === optimisticId ||
+            (msg.timestamp === optimisticMessage.timestamp &&
+             msg.sender._id === optimisticMessage.sender._id &&
+             msg.content === optimisticMessage.content)
+          );
+          const updated = exists ? prev : [...prev, optimisticMessage];
+          // Cache with reply context preserved
+          (async () => { try { if (currentChat?.id) await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); } catch (e) {} })();
+          return updated;
+        });
         setSendingMessages(prev => new Set([...prev, optimisticId]));
         scrollToBottom(true);
 
@@ -1550,19 +1869,31 @@ const StudentChat = () => {
           const realMessage = await sendChatMessage({
             chatId: currentChat.id,
             content: messageContent,
-            replyTo: replyToMessage?._id
+            replyTo: replyToMessage?._id || replyToMessage?.id
           });
 
           console.log('✅ [StudentChat] Message sent successfully:', realMessage);
 
-          setMessages(prev => prev.map(msg => 
+          setMessages(prev => {
+            const updated = prev.map(msg =>
             msg.id === optimisticId ? {
               ...realMessage,
-              id: realMessage._id,
+                id: realMessage._id || realMessage.id,
               isOptimistic: false,
-              replyTo: realMessage.replyTo || replyToMessage  // Preserve replyTo data
+                // Ensure reply context is preserved from server or fallback to original
+                replyTo: realMessage.replyTo || replyToMessage ? {
+                  _id: replyToMessage._id || replyToMessage.id,
+                  content: replyToMessage.content,
+                  sender: replyToMessage.sender,
+                  timestamp: replyToMessage.timestamp
+                } : null,
+                chatId: currentChat.id,
+                isFromServer: true
             } : msg
-          ));
+            );
+            (async () => { try { await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); } catch (e) {} })();
+            return updated;
+          });
 
           setSendingMessages(prev => {
             const newSet = new Set(prev);
@@ -1580,14 +1911,25 @@ const StudentChat = () => {
             error: textError.message || textError
           });
 
-          setMessages(prev => prev.map(msg => 
+          setMessages(prev => {
+            const updated = prev.map(msg =>
             msg.id === optimisticId ? {
               ...msg,
               content: `Failed to send: ${messageContent}`,
               sendError: true,
-              isOptimistic: false
+                isOptimistic: false,
+                replyTo: replyToMessage ? {
+                  _id: replyToMessage._id || replyToMessage.id,
+                  content: replyToMessage.content,
+                  sender: replyToMessage.sender,
+                  timestamp: replyToMessage.timestamp
+                } : null,
+                chatId: currentChat.id
             } : msg
-          ));
+            );
+            (async () => { try { await AsyncStorage.setItem(`chat_messages_${currentChat.id}`, JSON.stringify(updated)); } catch (e) {} })();
+            return updated;
+          });
 
           setSendingMessages(prev => {
             const newSet = new Set(prev);
@@ -1645,6 +1987,10 @@ const StudentChat = () => {
     }
 
     if (joinChat) joinChat(chat.id);
+    // Proactively mark as read on open
+    if (socket) {
+      try { socket.emit('markMessagesAsRead', { chatId: chat.id, userId: user._id }); } catch {}
+    }
   };
 
   const scrollToBottom = (animated = true) => {
@@ -1661,16 +2007,66 @@ const StudentChat = () => {
     }
   };
 
+  // maintain an index map for stable lookups
+  useEffect(() => {
+    const map = new Map();
+    messages.forEach((m, idx) => {
+      const key = m.id || m._id;
+      if (key) map.set(key, idx);
+    });
+    messageIndexMapRef.current = map;
+  }, [messages]);
+
   const scrollToMessage = (messageId) => {
-    const index = messages.findIndex(msg => msg.id === messageId);
-    if (index !== -1) {
-      flatListRef.current?.scrollToIndex({ 
+    const index = messageIndexMapRef.current.get(messageId);
+    if (index !== -1 && flatListRef.current) {
+      try {
+        // Clear any existing timeout
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+        
+        // Set flag to prevent auto-scroll interference
+        setIsScrollingToMessage(true);
+        
+        flatListRef.current.scrollToIndex({
         index, 
         animated: true, 
-        viewPosition: 0.5 
+          viewPosition: 0.3, // Show message slightly above center
+          viewOffset: 20 // Add some offset for better visibility
       });
+
+        // Highlight the message with animation
       setHighlightedMessageId(messageId);
-      setTimeout(() => setHighlightedMessageId(null), 2000);
+
+        // Clear highlight and reset flag after 3 seconds
+        scrollTimeoutRef.current = setTimeout(() => {
+          setHighlightedMessageId(null);
+          setIsScrollingToMessage(false);
+        }, 3000);
+
+        // Add a subtle flash animation
+        const highlightAnim = new Animated.Value(0);
+        Animated.sequence([
+          Animated.timing(highlightAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(highlightAnim, {
+            toValue: 0,
+            duration: 300,
+            delay: 1000,
+            useNativeDriver: true,
+          })
+        ]).start();
+
+      } catch (error) {
+        console.warn('Failed to scroll to message:', error);
+        setIsScrollingToMessage(false);
+        // Fallback: scroll to bottom if scrollToIndex fails
+        scrollToBottom(true);
+      }
     }
   };
 
@@ -1694,6 +2090,123 @@ const StudentChat = () => {
 
   const handleReply = (message) => {
     setReplyingTo(message);
+  };
+  // Enhanced Swipe-to-reply wrapper with improved stability and visual feedback
+  const SwipeableMessage = ({ children, onSwipeReply, message }) => {
+    const translateX = useRef(new Animated.Value(0)).current;
+    const replied = useRef(false);
+    const replyIconOpacity = useRef(new Animated.Value(0)).current;
+    const replyIconScale = useRef(new Animated.Value(0.8)).current;
+
+    const resetPosition = () => {
+      Animated.parallel([
+      Animated.spring(translateX, {
+        toValue: 0,
+        useNativeDriver: true,
+        bounciness: 6,
+        }),
+        Animated.timing(replyIconOpacity, {
+          toValue: 0,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+        Animated.spring(replyIconScale, {
+          toValue: 0.8,
+          useNativeDriver: true,
+        })
+      ]).start(() => {
+        replied.current = false;
+      });
+    };
+
+    const showReplyIcon = (progress) => {
+      const opacity = Math.min(progress / swipeThreshold, 1);
+      const scale = 0.8 + (opacity * 0.2);
+      replyIconOpacity.setValue(opacity);
+      replyIconScale.setValue(scale);
+    };
+
+    const panResponder = useRef(
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          const { dx, dy } = gestureState;
+          return Math.abs(dx) > 10 && Math.abs(dy) < 20;
+        },
+        onPanResponderGrant: () => {
+          replied.current = false;
+        },
+        onPanResponderMove: (_, gestureState) => {
+          const { dx } = gestureState;
+          const clampedDx = Math.max(Math.min(dx, 120), -120);
+          translateX.setValue(clampedDx);
+
+          // Show reply icon with progress for both directions
+          showReplyIcon(Math.abs(dx));
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const { dx } = gestureState;
+
+          if (Math.abs(dx) > swipeThreshold && !replied.current) {
+            replied.current = true;
+            // Trigger haptic feedback if available
+            if (Platform.OS === 'ios') {
+              // Add haptic feedback for iOS
+            }
+            onSwipeReply?.(message);
+
+            // Animate to show success
+            Animated.sequence([
+              Animated.timing(replyIconOpacity, {
+                toValue: 1,
+                duration: 100,
+                useNativeDriver: true,
+              }),
+              Animated.timing(replyIconOpacity, {
+                toValue: 0,
+                duration: 300,
+                delay: 500,
+                useNativeDriver: true,
+              })
+            ]).start();
+          }
+
+          resetPosition();
+        },
+        onPanResponderTerminate: resetPosition,
+      })
+    ).current;
+
+    return (
+      <View style={{ position: 'relative' }}>
+        {/* Reply indicator that appears on swipe */}
+        <Animated.View
+          style={[
+            styles.replyIndicator,
+            {
+              opacity: replyIconOpacity,
+              transform: [{ scale: replyIconScale }],
+            }
+          ]}
+        >
+          <Icon name="reply" size={20} color="#667EEA" />
+          <Text style={styles.replyIndicatorText}>Reply</Text>
+        </Animated.View>
+
+        <Animated.View
+          style={{
+            transform: [{ translateX }],
+            backgroundColor: translateX.interpolate({
+              inputRange: [0, 80],
+              outputRange: ['transparent', 'rgba(102, 126, 234, 0.1)'],
+            }),
+          }}
+          {...panResponder.panHandlers}
+        >
+        {children}
+      </Animated.View>
+      </View>
+    );
   };
 
   const cancelReply = () => {
@@ -1748,7 +2261,7 @@ const StudentChat = () => {
     setShowCreateAgreementModal(false);
   };
 
-  // Audio call functionality
+  // Enhanced audio call functionality with real-time streaming simulation
   const initiateCall = async () => {
     try {
     if (!currentChat?.otherParticipant) {
@@ -1764,6 +2277,34 @@ const StudentChat = () => {
       if (!hasPermissions) return;
       
       const callId = `call_${Date.now()}_${user._id}`;
+      
+      // Set outgoing call state
+      setOutgoingCall({
+        id: callId,
+        recipientId: otherUser._id || otherUser.id,
+        recipientName: otherUser.name,
+        recipientAvatar: otherUser.avatar,
+        chatId: currentChat?.id
+      });
+      setCallState('calling');
+      
+      // Emit call initiation with enhanced data
+      if (socket) {
+        socket.emit('initiateCall', {
+          to: otherUser._id || otherUser.id,
+          from: user._id,
+          fromName: user.name,
+          fromAvatar: user.avatar,
+          chatId: currentChat?.id,
+          callId,
+          // Legacy keys for compatibility
+          recipientId: otherUser._id || otherUser.id,
+          callerId: user._id,
+          callerName: user.name,
+          callerAvatar: user.avatar,
+          timestamp: Date.now()
+        });
+      }
       
       // Navigate to WebRTC audio call screen
       router.push({
@@ -1782,6 +2323,7 @@ const StudentChat = () => {
     } catch (error) {
       console.error('❌ [StudentChat] Call initiation error:', error);
       setCallState('failed');
+      setOutgoingCall(null);
       Alert.alert('Call Failed', 'Unable to initiate call. Please try again.');
     }
   };
@@ -1873,11 +2415,15 @@ const StudentChat = () => {
       stopRingtone();
       startCallTimer();
       
+      // Start simulated audio streaming
+      startAudioStreaming();
+      
       // Emit call accepted event
       if (socket && incomingCall) {
         socket.emit('callAccepted', {
           callId: incomingCall.id,
-          recipientId: user._id
+          recipientId: user._id,
+          timestamp: Date.now()
         });
       }
       
@@ -1920,12 +2466,14 @@ const StudentChat = () => {
       setCallStartTime(null);
       stopCallTimer();
       stopRingtone();
+      stopAudioStreaming();
       
       // Emit call ended event
       if (socket) {
         socket.emit('callEnded', {
           callId: incomingCall?.id || outgoingCall?.id,
-          userId: user._id
+          userId: user._id,
+          timestamp: Date.now()
         });
       }
       
@@ -1954,6 +2502,41 @@ const StudentChat = () => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // Enhanced audio streaming simulation for real-time calls
+  const startAudioStreaming = async () => {
+    try {
+      console.log('🎵 [StudentChat] Starting audio streaming simulation...');
+      
+      // Set up audio mode for real-time streaming
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+        shouldDuckAndroid: true,
+        playThroughEarpieceAndroid: false,
+        staysActiveInBackground: true,
+        interruptionModeIOS: Audio.INTERRUPTION_MODE_IOS_DO_NOT_MIX,
+        interruptionModeAndroid: Audio.INTERRUPTION_MODE_ANDROID_DO_NOT_MIX,
+      });
+
+      // Simulate real-time audio streaming
+      // In a real implementation, this would handle WebRTC audio streams
+      console.log('✅ [StudentChat] Audio streaming started');
+      
+    } catch (error) {
+      console.error('❌ [StudentChat] Audio streaming error:', error);
+    }
+  };
+
+  const stopAudioStreaming = () => {
+    try {
+      console.log('🎵 [StudentChat] Stopping audio streaming...');
+      // Clean up audio streaming resources
+      console.log('✅ [StudentChat] Audio streaming stopped');
+    } catch (error) {
+      console.error('❌ [StudentChat] Stop audio streaming error:', error);
+    }
   };
 
   // File handling utility functions
@@ -2146,18 +2729,21 @@ const StudentChat = () => {
     setSnackbarVisible(true);
   };
 
+
   const formatTime = (timestamp) => {
     try {
+      if (!timestamp) return '';
       const date = new Date(timestamp);
+      if (isNaN(date.getTime())) return '';
       const now = new Date();
-      const diff = now - date;
-      
+      const diff = now.getTime() - date.getTime();
+
       if (diff < 60000) return 'Just now';
       if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`;
-      if (diff < 86400000) return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      if (diff < 86400000) return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+      return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
     } catch (error) {
-      return 'Now';
+      return '';
     }
   };
 
@@ -2440,7 +3026,7 @@ const StudentChat = () => {
 
     if (isOwn) {
       // Own message - right aligned
-      return (
+      const Content = (
         <View style={[
           styles.messageContainer,
           styles.ownMessageContainer,
@@ -2449,15 +3035,46 @@ const StudentChat = () => {
           <View style={[styles.messageBubble, styles.ownBubble]}>
           {message.replyTo && (
             <TouchableOpacity 
-              style={styles.replyContainer}
+              style={[styles.replyContainer, { 
+                backgroundColor: 'rgba(34,197,94,0.15)',
+                borderLeftColor: '#22C55E',
+                borderLeftWidth: 3,
+                borderRadius: 12,
+                marginBottom: 8,
+                padding: 12,
+                flexDirection: 'row',
+                alignItems: 'center'
+              }]}
               onPress={() => scrollToMessage(message.replyTo._id)}
+              activeOpacity={0.7}
             >
-              <View style={styles.replyBar} />
+              <View style={[styles.replyBar, { 
+                width: 3, 
+                backgroundColor: '#22C55E', 
+                borderRadius: 1.5, 
+                marginRight: 12 
+              }]} />
               <View style={styles.replyContent}>
-                <Text style={[styles.replyAuthor, { color: 'rgba(255,255,255,0.9)' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={[styles.replyAuthor, { 
+                    color: 'rgba(255,255,255,0.9)', 
+                    fontSize: 12, 
+                    fontWeight: '600' 
+                  }]}>
                   {message.replyTo.sender?.name}
                 </Text>
-                <Text style={[styles.replyText, { color: 'rgba(255,255,255,0.7)' }]} numberOfLines={2}>
+                  <Icon 
+                    name="arrow-top-right" 
+                    size={12} 
+                    color="rgba(255,255,255,0.6)" 
+                    style={{ marginLeft: 6 }} 
+                  />
+                </View>
+                <Text style={[styles.replyText, { 
+                  color: 'rgba(255,255,255,0.7)', 
+                  fontSize: 13,
+                  lineHeight: 16
+                }]} numberOfLines={2}>
                   {message.replyTo.content}
                 </Text>
               </View>
@@ -2545,16 +3162,21 @@ const StudentChat = () => {
                 styles.messageTime,
                 styles.ownMessageTime
               ]}>
-                {formatTime(message.timestamp)}
+                {formatTime(message.timestamp) || ' '}
               </Text>
               {renderMessageStatus(message)}
             </View>
           </View>
         </View>
       );
+      return (
+        <SwipeableMessage message={message} onSwipeReply={handleReply}>
+          {Content}
+        </SwipeableMessage>
+      );
     } else {
       // Other's message - left aligned with avatar
-      return (
+      const Content = (
         <View style={[
           styles.messageContainer,
           styles.otherMessageContainer,
@@ -2578,15 +3200,46 @@ const StudentChat = () => {
           ]}>
             {message.replyTo && (
             <TouchableOpacity 
-              style={styles.replyContainer}
+              style={[styles.replyContainer, { 
+                backgroundColor: 'rgba(34,197,94,0.10)',
+                borderLeftColor: '#22C55E',
+                borderLeftWidth: 3,
+                borderRadius: 12,
+                marginBottom: 8,
+                padding: 12,
+                flexDirection: 'row',
+                alignItems: 'center'
+              }]}
               onPress={() => scrollToMessage(message.replyTo._id)}
+              activeOpacity={0.7}
             >
-              <View style={styles.replyBar} />
+              <View style={[styles.replyBar, { 
+                width: 3, 
+                backgroundColor: '#22C55E', 
+                borderRadius: 1.5, 
+                marginRight: 12 
+              }]} />
               <View style={styles.replyContent}>
-                <Text style={[styles.replyAuthor, { color: '#1F2937' }]}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 4 }}>
+                  <Text style={[styles.replyAuthor, { 
+                    color: '#1F2937', 
+                    fontSize: 12, 
+                    fontWeight: '600' 
+                  }]}>
                   {message.replyTo.sender?.name}
                 </Text>
-                <Text style={[styles.replyText, { color: '#6B7280' }]} numberOfLines={2}>
+                  <Icon 
+                    name="arrow-top-right" 
+                    size={12} 
+                    color="#6B7280" 
+                    style={{ marginLeft: 6 }} 
+                  />
+                </View>
+                <Text style={[styles.replyText, { 
+                  color: '#6B7280', 
+                  fontSize: 13,
+                  lineHeight: 16
+                }]} numberOfLines={2}>
                   {message.replyTo.content}
                 </Text>
               </View>
@@ -2674,7 +3327,7 @@ const StudentChat = () => {
                 styles.messageTime,
                 styles.otherMessageTime
               ]}>
-                {formatTime(message.timestamp)}
+                {formatTime(message.timestamp) || ' '}
               </Text>
             </View>
           </View>
@@ -2686,6 +3339,11 @@ const StudentChat = () => {
             <Icon name="reply" size={14} color="#9CA3AF" />
           </TouchableOpacity>
         </View>
+      );
+      return (
+        <SwipeableMessage message={message} onSwipeReply={handleReply}>
+          {Content}
+        </SwipeableMessage>
       );
     }
   };
@@ -2843,8 +3501,17 @@ const StudentChat = () => {
   const renderMainView = () => (
     <View style={styles.mainContainer}>
       <LinearGradient colors={['#015382', '#017DB0']} style={styles.mainHeader}>
+        <TouchableOpacity 
+          style={styles.backButton}
+          onPress={() => router.push('/')}
+        >
+          <Icon name="arrow-left" size={24} color="white" />
+        </TouchableOpacity>
+        <View style={{ flex: 1, alignItems: 'center' }}>
         <Text style={styles.mainTitle}>Student Dashboard</Text>
         <Text style={styles.mainSubtitle}>Manage your conversations and agreements</Text>
+        </View>
+        <View style={{ width: 40 }} />
       </LinearGradient>
 
       {/* Tabs */}
@@ -2878,7 +3545,9 @@ const StudentChat = () => {
       <LinearGradient colors={['#015382', '#017DB0']} style={styles.chatViewHeader}>
         <TouchableOpacity 
           style={styles.backButton}
-          onPress={() => setShowChatList(true)}
+          onPress={() => {
+            setShowChatList(true);
+          }}
         >
           <Icon name="arrow-left" size={24} color="white" />
         </TouchableOpacity>
@@ -3005,10 +3674,37 @@ const StudentChat = () => {
             data={messages}
             renderItem={renderMessage}
             keyExtractor={(item, index) => String(item._id || item.id || item.messageId || item.timestamp || `msg-${index}`)}
-            contentContainerStyle={styles.messagesList}
-            onContentSizeChange={() => scrollToBottom(false)}
-            onLayout={() => scrollToBottom(false)}
+            contentContainerStyle={[styles.messagesList, { paddingBottom: 24 }]}
+            onContentSizeChange={() => {
+              if (!isScrollingToMessage && !isUserScrollingRef.current) {
+                scrollToBottom(true);
+              }
+            }}
+            onLayout={() => {
+              if (!isScrollingToMessage && !isUserScrollingRef.current) {
+                scrollToBottom(true);
+              }
+            }}
             showsVerticalScrollIndicator={false}
+            onScrollToIndexFailed={(info) => {
+              try {
+                const wait = new Promise(resolve => setTimeout(resolve, 300));
+                wait.then(() => {
+                  if (flatListRef.current) {
+                    flatListRef.current.scrollToOffset({ offset: Math.max(0, info.averageItemLength * info.index), animated: true });
+                  }
+                });
+              } catch (e) {}
+            }}
+            getItemLayout={(_, index) => ({ length: 72, offset: 72 * index, index })}
+            onScrollBeginDrag={() => {
+              isUserScrollingRef.current = true;
+            }}
+            onScrollEndDrag={() => {
+              setTimeout(() => {
+                isUserScrollingRef.current = false;
+              }, 1000);
+            }}
             onScroll={(event) => {
               const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
               const isAtBottom = contentOffset.y + layoutMeasurement.height >= contentSize.height - 50;
@@ -3043,16 +3739,27 @@ const StudentChat = () => {
 
       {/* Reply Banner */}
       {replyingTo && (
-        <View style={styles.replyBanner}>
-          <View style={styles.replyBannerContent}>
-            <Text style={styles.replyBannerAuthor}>
+        <View style={[styles.replyBanner, { 
+          backgroundColor: '#F0F9FF',
+          borderBottomColor: '#0EA5E9',
+          borderBottomWidth: 2
+        }]}>
+          <TouchableOpacity 
+            style={[styles.replyBannerContent, { flexDirection: 'row', alignItems: 'center' }]} 
+            onPress={() => scrollToMessage(replyingTo.id || replyingTo._id)}
+            activeOpacity={0.7}
+          >
+            <Icon name="arrow-top-right" size={16} color="#0EA5E9" style={{ marginRight: 8 }} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.replyBannerAuthor, { color: '#0EA5E9' }]}>
               Replying to {replyingTo.sender.name}
             </Text>
-            <Text style={styles.replyBannerText} numberOfLines={1}>
+              <Text style={[styles.replyBannerText, { color: '#64748B' }]} numberOfLines={1}>
               {replyingTo.content}
             </Text>
-          </View>
-          <TouchableOpacity onPress={cancelReply}>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={cancelReply} style={{ padding: 4 }}>
             <Icon name="close" size={20} color="#6B7280" />
           </TouchableOpacity>
         </View>
@@ -3319,6 +4026,5 @@ const StudentChat = () => {
     </PaperProvider>
   );
 };
-
 
 export default StudentChat;

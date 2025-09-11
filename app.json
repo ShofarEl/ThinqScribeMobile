@@ -44,9 +44,9 @@
       [
         "expo-notifications",
         {
-          "icon": "./assets/images/notification-icon.png",
+          "icon": "./assets/images/icon.png",
           "color": "#ffffff",
-          "sounds": ["./assets/notification.wav"]
+          "sounds": ["./assets/live-the-moment-67986.mp3"]
         }
       ],
       [
@@ -105,9 +105,7 @@
         }
       }
     },
-    "runtimeVersion": {
-      "policy": "appVersion"
-    },
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/0d929edf-258b-4ee9-b0ee-69175782fe3d"
     }

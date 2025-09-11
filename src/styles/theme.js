@@ -1,3 +1,4 @@
+import { Platform } from 'react-native';
 import { DefaultTheme } from 'react-native-paper';
 import { colors, typography } from './designSystem';
 
@@ -38,76 +39,76 @@ export const theme = {
   fonts: {
     // Override default fonts completely to avoid conflicts
     regular: {
-      fontFamily: typography.fonts.body.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Regular' : typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,
     },
     medium: {
-      fontFamily: typography.fonts.bodySemibold.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Medium' : typography.fonts.bodySemibold.fontFamily,
       fontWeight: typography.fonts.bodySemibold.fontWeight,
     },
     light: {
-      fontFamily: typography.fonts.body.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Regular' : typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,
     },
     thin: {
-      fontFamily: typography.fonts.body.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Regular' : typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,
     },
     // Add missing MD3-compatible variant to prevent runtime errors when components request it
     bodyMedium: {
-      fontFamily: typography.fonts.body.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Regular' : typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,
     },
     bodySmall: {
-      fontFamily: typography.fonts.body.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Regular' : typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,
     },
     bodyLarge: {
-      fontFamily: typography.fonts.body.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Regular' : typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,
     },
     label: {
-      fontFamily: typography.fonts.caption.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Medium' : typography.fonts.caption.fontFamily,
       fontWeight: typography.fonts.caption.fontWeight,
     },
     labelLarge: {
-      fontFamily: typography.fonts.caption.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Medium' : typography.fonts.caption.fontFamily,
       fontWeight: typography.fonts.caption.fontWeight,
     },
     input: {
-      fontFamily: typography.fonts.body.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Regular' : typography.fonts.body.fontFamily,
       fontWeight: typography.fonts.body.fontWeight,
     },
     button: {
-      fontFamily: typography.fonts.bodySemibold.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Bold' : typography.fonts.bodySemibold.fontFamily,
       fontWeight: typography.fonts.bodySemibold.fontWeight,
     },
     buttonSmall: {
-      fontFamily: typography.fonts.bodySemibold.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Bold' : typography.fonts.bodySemibold.fontFamily,
       fontWeight: typography.fonts.bodySemibold.fontWeight,
     },
     buttonLarge: {
-      fontFamily: typography.fonts.bodySemibold.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Bold' : typography.fonts.bodySemibold.fontFamily,
       fontWeight: typography.fonts.bodySemibold.fontWeight,
     },
     link: {
-      fontFamily: typography.fonts.bodySemibold.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Medium' : typography.fonts.bodySemibold.fontFamily,
       fontWeight: typography.fonts.bodySemibold.fontWeight,
     },
     caption: {
-      fontFamily: typography.fonts.caption.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Regular' : typography.fonts.caption.fontFamily,
       fontWeight: typography.fonts.caption.fontWeight,
     },
     error: {
-      fontFamily: typography.fonts.caption.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Medium' : typography.fonts.caption.fontFamily,
       fontWeight: typography.fonts.caption.fontWeight,
     },
     logo: {
-      fontFamily: typography.fonts.heading.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Bold' : typography.fonts.heading.fontFamily,
       fontWeight: typography.fonts.heading.fontWeight,
     },
     bold: {
-      fontFamily: typography.fonts.heading.fontFamily,
+      fontFamily: Platform.OS === 'android' ? 'Inter-Bold' : typography.fonts.heading.fontFamily,
       fontWeight: typography.fonts.heading.fontWeight,
     },
   },
